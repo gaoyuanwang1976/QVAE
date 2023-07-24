@@ -87,8 +87,8 @@ class QVAE_NN(SamplerQNN):
         for item in reduced_result:
             latent_state=qi.DensityMatrix(item)
             latent_full=latent_state.tensor(reconstruction_qubits)
-            n_qubit_d=latent_full.dims()[0]
-            assert(n_qubit==n_qubit_d)
+
+            assert(2**n_qubit==latent_full.dim)
             decoder_output.append(latent_full.evolve(qc_d))
 
         return decoder_output,reduced_result
@@ -142,14 +142,12 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         return -sum
     
     def quantum_relative_entropy(self,latent):
-        dim=latent[0].dims()[0]
+        dim=latent[0].dim
         max_mixed_state=np.diag(np.full(dim,1/dim))
         log_m=scipy.linalg.logm(max_mixed_state)/np.log(2.0) # must be in base 2
         entropy_loss=0
         for state in latent:
-            my_entropy=qi.entropy(state) ## check, this is base 2 by default
-            #my_log_m=scipy.linalg.logm(state)/np.log(2.0)
-            #my_entropy_2=-qi.DensityMatrix(np.dot(state,my_log_m)).trace()
+            my_entropy=qi.entropy(state) ## this is log base 2 by default
             relative_entropy=-qi.DensityMatrix(np.dot(state,log_m)).trace()-my_entropy
             entropy_loss=entropy_loss+relative_entropy.real
         return entropy_loss

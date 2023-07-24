@@ -131,9 +131,30 @@ if __name__=="__main__":
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
     model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True)
 
+    best_val_score=0
+
     for epoch in range(num_epoch):
         model.fit(Xtrain, Xtrain)
         this_train_score=model.score(Xtrain, Xtrain)
         this_val_score=model.score(Xval, Xval)
         print(epoch,this_train_score,this_val_score)
+
+        if this_val_score > best_val_score: #validation wrapper
+            best_val_epoch = epoch
+            best_val_acc=this_val_score
+            best_model= copy.deepcopy(model)
+            patience_counter = 0
+            print(f"new best validation score {best_val_acc}")
+        else:
+            patience_counter+=1
+        if patience_counter == args.patience:
+            print("ran out of patience")
+            break
+
+    trainscore = best_model.score(Xtrain, Xtrain)
+    testscore = best_model.score(Xtest, Xtest)
+    valscore = best_model.score(Xval, Xval)
+    print(f'best model train score: {trainscore}')
+    print(f'best model test score: {testscore}')
+    print(f'best model val score: {valscore}')
   
