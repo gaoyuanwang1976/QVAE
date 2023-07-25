@@ -141,10 +141,10 @@ if __name__=="__main__":
 
         if this_val_score > best_val_score: #validation wrapper
             best_val_epoch = epoch
-            best_val_acc=this_val_score
+            best_val_score=this_val_score
             best_model= copy.deepcopy(model)
             patience_counter = 0
-            print(f"new best validation score {best_val_acc}")
+            print(f"new best validation score {best_val_score}")
         else:
             patience_counter+=1
         if patience_counter == args.patience:
