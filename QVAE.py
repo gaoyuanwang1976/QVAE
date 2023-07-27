@@ -9,7 +9,7 @@ from qiskit_machine_learning.neural_networks import CircuitQNN,SamplerQNN
 from qiskit_machine_learning.algorithms import NeuralNetworkRegressor
 
 from qiskit.utils import algorithm_globals
-algorithm_globals.random_seed = 42
+#algorithm_globals.random_seed = 42
 import math
 import core
 import preprocessing
@@ -42,8 +42,8 @@ if __name__=="__main__":
     parser.add_argument('-x','--shots', required=False, type=int, help="the number of shots per circuit simulation", default=100)
     parser.add_argument('--shuffle', required=False, type=bool, help='determines whether to shuffle data before alternating', default=False)
     parser.add_argument('--shuffleseed', required=False, type=int, help='a seed for use in shuffling the dataset, if left False and --shuffle=True, will be completely random', default=False)
-
-
+    parser.add_argument('-t','--num_trash_qubits', required=False, type=int, help='number of trash qubits', default=1)
+    parser.add_argument('--input_dim', required=False, type=int, help='customize the input data dimension, if zero the original input dimension is preserved', default=0)
     args = parser.parse_args()
 
     import_name = 'dataset/data_1'
@@ -53,6 +53,7 @@ if __name__=="__main__":
     shuffle=args.shuffle
     shuffleseed = args.shuffleseed
     n_layers = args.num_layers
+    trash_qubits=list(range(args.num_trash_qubits))
 
     partition_size=args.partition_size
     if partition_size != 'max':
@@ -95,7 +96,10 @@ if __name__=="__main__":
     Xtrain, ytrain = preprocessing.convert_for_qiskit(train_set)
     Xval, yval = preprocessing.convert_for_qiskit(val_set)
     Xtest, ytest = preprocessing.convert_for_qiskit(test_set)
-    n_dim=4
+    if args.input_dim==0:
+        n_dim=len(Xtrain[0])
+    else:
+        n_dim=args.input_dim
     Xtrain=((Xtrain-minData)/(maxData-minData)*np.pi).T[:n_dim].T
     Xval=((Xval-minData)/(maxData-minData)*np.pi).T[:n_dim].T
     Xtest=((Xtest-minData)/(maxData-minData)*np.pi).T[:n_dim].T
@@ -123,7 +127,7 @@ if __name__=="__main__":
     qc_e=core.encoder(n_layers,n_qubit,theta_params[:num_encoder_params])
     qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:])
 
-    qnn = core.QVAE_NN(circuit=qc_e, encoder=qc_e,decoder=qc_d,input_params=x_params, weight_params=theta_params,num_encoder_params=num_encoder_params)
+    qnn = core.QVAE_NN(circuit=qc_e, encoder=qc_e,decoder=qc_d,input_params=x_params, weight_params=theta_params,num_encoder_params=num_encoder_params,trash_qubits=trash_qubits)
     #qnn = SamplerQNN(circuit=qc_e, input_params=x_params, weight_params=theta_params_e)
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
@@ -134,6 +138,7 @@ if __name__=="__main__":
     best_val_score=0
 
     for epoch in range(num_epoch):
+        print(Xtrain[0])
         model.fit(Xtrain, Xtrain)
         this_train_score=model.score(Xtrain, Xtrain)
         this_val_score=model.score(Xval, Xval)

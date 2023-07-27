@@ -20,7 +20,7 @@ import embedding
 
 class QVAE_NN(SamplerQNN):
 
-    def __init__(self,encoder: QuantumCircuit,decoder: QuantumCircuit,num_encoder_params:int,**kwargs):
+    def __init__(self,encoder: QuantumCircuit,decoder: QuantumCircuit,num_encoder_params:int,trash_qubits,**kwargs):
             super(QVAE_NN, self).__init__(**kwargs)
             self._encoder = encoder.copy()
             if len(self._encoder.clbits) == 0:
@@ -29,14 +29,16 @@ class QVAE_NN(SamplerQNN):
             #if len(self._decoder.clbits) == 0:
             #    self._decoder.measure_all()
             self._num_encoder_params=num_encoder_params
+            self._trash_qubits=trash_qubits
 
-    def forward(self,input_data,weights,trash_qubits=[0]):
+    def forward(self,input_data,weights):
         """
         Forward pass of the network.
         """
         num_encoder_params=self._num_encoder_params
         encoder_weights=weights[:num_encoder_params]
         decoder_weights=weights[num_encoder_params:]
+        trash_qubits=self._trash_qubits
         _, num_samples = self._preprocess_forward(input_data, encoder_weights)
 
         ### Encoder 
