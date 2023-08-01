@@ -97,10 +97,14 @@ class QVAE_NN(SamplerQNN):
 
 
 class QVAE_trainer(NeuralNetworkRegressor):
+    def __init__(self,reconstruction_loss='fidelity',**kwargs):
+        super(QVAE_trainer, self).__init__(**kwargs)
+        self._reconstruction_loss=reconstruction_loss
+
     def _fit_internal(self, X: np.ndarray, y: np.ndarray):
         function: ObjectiveFunction = None
         #function = StateVector_ObjectiveFunction(X, y, self._neural_network, self._loss)
-        function = DensityMatrix_ObjectiveFunction(X, y, self._neural_network, self._loss)
+        function = DensityMatrix_ObjectiveFunction(X=X, y=y, neural_network=self._neural_network,loss=self._loss,reconstruction_loss=self._reconstruction_loss)
         return self._minimize(function)
     
     def score(self, X, y):
@@ -135,11 +139,21 @@ class StateVector_ObjectiveFunction(ObjectiveFunction):
         return grad
     
 class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
+    def __init__(self,reconstruction_loss,**kwargs):
+        super(DensityMatrix_ObjectiveFunction, self).__init__(**kwargs)
+        self._reconstruction_loss=reconstruction_loss
 
-    def fidelity_loss(self,matrix,vector):
+    def reconstruction_loss(self,matrix,vector):
         sum=0
         for v,m in zip(vector,matrix):
-            current_fidelity=qi.state_fidelity(m,v,validate=True) # check why is m not a valid state
+            if self._reconstruction_loss=='cross_entropy':
+                m=qi.DensityMatrix(scipy.linalg.logm(m)/np.log(2.0))
+                trace=m.trace()
+                m=m/trace
+                current_fidelity=qi.state_fidelity(m,v,validate=False) # m has difficulty getting trace one
+            else:
+                current_fidelity=qi.state_fidelity(m,v,validate=True)
+
             sum=sum+current_fidelity
         return -sum
     
@@ -162,7 +176,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         output = forward_result[0]
         latent=forward_result[1]
         #val =sum(self._loss(output, self._y))
-        val_1 =self.fidelity_loss(matrix=output, vector=self._y)
+        val_1 =self.reconstruction_loss(matrix=output, vector=self._y)
         val_2 =self.quantum_entropy(latent=latent)
 
         val = (val_1+val_2) / self._num_samples

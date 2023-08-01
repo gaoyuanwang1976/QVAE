@@ -44,6 +44,8 @@ if __name__=="__main__":
     parser.add_argument('--shuffleseed', required=False, type=int, help='a seed for use in shuffling the dataset, if left False and --shuffle=True, will be completely random', default=False)
     parser.add_argument('-t','--num_trash_qubits', required=False, type=int, help='number of trash qubits', default=1)
     parser.add_argument('--input_dim', required=False, type=int, help='customize the input data dimension, if zero the original input dimension is preserved', default=0)
+    parser.add_argument('--reconstruction_loss', required=False, type=str, help='define the loss used in the reconstruction term of the objective', default='fidelity')
+
     args = parser.parse_args()
 
     import_name = 'dataset/data_1'
@@ -131,9 +133,12 @@ if __name__=="__main__":
     #qnn = SamplerQNN(circuit=qc_e, input_params=x_params, weight_params=theta_params_e)
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
-
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
-    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True)
+    reconstruction_loss=args.reconstruction_loss
+    if reconstruction_loss not in ['cross_entropy','fidelity']:
+        reconstruction_loss='fidelity'
+        print('reconstruction loss choice not recognized, using fidelity loss')
+    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss)
 
     best_val_score=0
 
