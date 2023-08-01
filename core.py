@@ -143,15 +143,17 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
             sum=sum+current_fidelity
         return -sum
     
-    def quantum_relative_entropy(self,latent):
-        dim=latent[0].dim
-        max_mixed_state=np.diag(np.full(dim,1/dim))
-        log_m=scipy.linalg.logm(max_mixed_state)/np.log(2.0) # must be in base 2
+    def quantum_entropy(self,latent):
+        #dim=latent[0].dim
+        #max_mixed_state=np.diag(np.full(dim,1/dim))
+        #log_m=scipy.linalg.logm(max_mixed_state)/np.log(2.0) # must be in base 2
         entropy_loss=0
         for state in latent:
             my_entropy=qi.entropy(state) ## this is log base 2 by default
-            relative_entropy=-qi.DensityMatrix(np.dot(state,log_m)).trace()-my_entropy
-            entropy_loss=entropy_loss+relative_entropy.real
+            ### the first term below is constant
+            #relative_entropy=-qi.DensityMatrix(np.dot(state,log_m)).trace()-my_entropy
+            entropy_loss=entropy_loss-my_entropy.real
+            #entropy_loss=entropy_loss+relative_entropy.real
         return entropy_loss
 
     def objective(self, weights: np.ndarray) -> float:
@@ -161,7 +163,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         latent=forward_result[1]
         #val =sum(self._loss(output, self._y))
         val_1 =self.fidelity_loss(matrix=output, vector=self._y)
-        val_2 =self.quantum_relative_entropy(latent=latent)
+        val_2 =self.quantum_entropy(latent=latent)
 
         val = (val_1+val_2) / self._num_samples
         return val
