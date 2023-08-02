@@ -46,6 +46,7 @@ if __name__=="__main__":
     parser.add_argument('--input_dim', required=False, type=int, help='customize the input data dimension, if zero the original input dimension is preserved', default=0)
     parser.add_argument('--reconstruction_loss', required=False, type=str, help='define the loss used in the reconstruction term of the objective', default='fidelity')
     parser.add_argument('--beta_weight', required=False, type=float, help='the beta parameter that controlls the relative weight of the quantum entropy term in the objective', default=1.0)
+    parser.add_argument('--divergence_type', required=False, type=str, help='choose between KL-Divergence and JS-Divergence', default='JSD')
 
     args = parser.parse_args()
 
@@ -62,7 +63,8 @@ if __name__=="__main__":
         parition_size = int(partition_size)
     ratio = args.partition_ratio.split(":")
     ratio = [float(entry) for entry in ratio]
-    #########
+    
+    ######### QVAE specific parameters
     trash_qubits=list(range(args.num_trash_qubits))
 
     reconstruction_loss=args.reconstruction_loss
@@ -71,6 +73,12 @@ if __name__=="__main__":
         print('reconstruction loss choice not recognized, using fidelity loss')
 
     beta_weight=args.beta_weight
+
+    divergence_type=args.divergence_type
+    if divergence_type not in ['KLD','JSD']:
+        print('divergence type not recognized, use JSD instead')
+        divergence_type='JSD'
+    ##########
 
     if args.optimizer.lower() == 'cobyla':
         optimizer = COBYLA
@@ -141,7 +149,7 @@ if __name__=="__main__":
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
-    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight)
+    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type)
 
     best_val_score=0
 

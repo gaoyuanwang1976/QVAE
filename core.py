@@ -26,8 +26,6 @@ class QVAE_NN(SamplerQNN):
             if len(self._encoder.clbits) == 0:
                 self._encoder.measure_all()
             self._decoder = decoder.copy()
-            #if len(self._decoder.clbits) == 0:
-            #    self._decoder.measure_all()
             self._num_encoder_params=num_encoder_params
             self._trash_qubits=trash_qubits
 
@@ -56,7 +54,6 @@ class QVAE_NN(SamplerQNN):
             qc_list.append(qc_e)
 
         # sampler allows batching
-        ### replace [self._circuit] * num_samples with qc_list
         job = self.sampler.run(qc_list, encoder_params)
 
         try:
@@ -66,7 +63,6 @@ class QVAE_NN(SamplerQNN):
         result = self._postprocess(num_samples, results) #full dimensional output 
         if trash_qubits==None:
             reduced_result=result
-            #return result
         else:
             reduced_result=[]
             for state in result:
@@ -75,7 +71,6 @@ class QVAE_NN(SamplerQNN):
                 trace=reduced_state.trace()
                 reduced_state=reduced_state/trace
                 reduced_result.append(reduced_state) # reduced output by tracing out trash qubits
-            #return reduced_result
 
         ### Decoder
         num_trash=2**len(trash_qubits)
@@ -97,15 +92,16 @@ class QVAE_NN(SamplerQNN):
 
 
 class QVAE_trainer(NeuralNetworkRegressor):
-    def __init__(self,beta,reconstruction_loss='fidelity',**kwargs):
+    def __init__(self,beta,divergence_type,reconstruction_loss='fidelity',**kwargs):
         super(QVAE_trainer, self).__init__(**kwargs)
         self._reconstruction_loss=reconstruction_loss
         self._beta=beta
+        self._divergence_type=divergence_type
 
     def _fit_internal(self, X: np.ndarray, y: np.ndarray):
         function: ObjectiveFunction = None
         #function = StateVector_ObjectiveFunction(X, y, self._neural_network, self._loss)
-        function = DensityMatrix_ObjectiveFunction(X=X, y=y, neural_network=self._neural_network,loss=self._loss,reconstruction_loss=self._reconstruction_loss,beta=self._beta)
+        function = DensityMatrix_ObjectiveFunction(X=X, y=y, neural_network=self._neural_network,loss=self._loss,reconstruction_loss=self._reconstruction_loss,beta=self._beta,divergence_type=self._divergence_type)
         return self._minimize(function)
     
     def score(self, X, y):
@@ -113,7 +109,6 @@ class QVAE_trainer(NeuralNetworkRegressor):
         fidelity_score=0
         for i,j in zip(y_pred,y):
             fidelity_score =fidelity_score+qi.state_fidelity(i,j,validate=True)
-
         return fidelity_score/len(y)
 
 class StateVector_ObjectiveFunction(ObjectiveFunction):
@@ -140,10 +135,11 @@ class StateVector_ObjectiveFunction(ObjectiveFunction):
         return grad
     
 class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
-    def __init__(self,reconstruction_loss,beta,**kwargs):
+    def __init__(self,reconstruction_loss,beta,divergence_type,**kwargs):
         super(DensityMatrix_ObjectiveFunction, self).__init__(**kwargs)
         self._reconstruction_loss=reconstruction_loss
         self._beta=beta
+        self._divergence_type=divergence_type
 
     def reconstruction_loss(self,matrix,vector):
         sum=0
@@ -153,24 +149,44 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                 trace=m.trace()
                 m=m/trace
                 current_fidelity=qi.state_fidelity(m,v,validate=False) # m has difficulty getting trace one
-            else:
+            elif self._reconstruction_loss=='fidelity':
                 current_fidelity=qi.state_fidelity(m,v,validate=True)
+            else:
+                raise ValueError('reconstruction loss type not recognized')
 
             sum=sum+current_fidelity
         return -sum
     
-    def quantum_entropy(self,latent):
-        #dim=latent[0].dim
-        #max_mixed_state=np.diag(np.full(dim,1/dim))
-        #log_m=scipy.linalg.logm(max_mixed_state)/np.log(2.0) # must be in base 2
+    def quantum_relative_entropy(self,latent):
+        type_divergence=self._divergence_type
         entropy_loss=0
-        for state in latent:
-            my_entropy=qi.entropy(state) ## this is log base 2 by default
-            ### the first term below is constant
-            #relative_entropy=-qi.DensityMatrix(np.dot(state,log_m)).trace()-my_entropy
-            entropy_loss=entropy_loss-my_entropy.real
-            #entropy_loss=entropy_loss+relative_entropy.real
-        return entropy_loss
+            
+        ## analogy KL divergence
+        if type_divergence=='KLD':
+            for state in latent:
+                dim=latent[0].dim
+                max_mixed_state=np.diag(np.full(dim,1/dim))
+                max_entropy=qi.entropy(max_mixed_state) ## this is log base 2 by default
+                log_state=scipy.linalg.logm(state)/np.log(2.0) # in base 2
+                relative_entropy=-qi.DensityMatrix(np.dot(max_mixed_state,log_state)).trace()-max_entropy #KL(a||b), a is actual, b is predict
+                entropy_loss=entropy_loss-relative_entropy.real
+            return entropy_loss
+
+        ## analogy Jensen-Shannon divergence
+        elif type_divergence=='JSD':
+            for state in latent:
+                dim=latent[0].dim
+                max_mixed_state=np.diag(np.full(dim,1/dim))
+                M_state=0.5*(state+max_mixed_state)
+                log_M=scipy.linalg.logm(M_state)/np.log(2.0) # in base 2
+                my_entropy=qi.entropy(state) 
+                max_entryopy=qi.entropy(max_mixed_state)
+                #JSD(a||b)=0.5*KL(a||M)+0.5*KL(b||M), M=0.5a+0.5b
+                relative_entropy=(-qi.DensityMatrix(np.dot(state,log_M)).trace()-my_entropy-qi.DensityMatrix(np.dot(max_mixed_state,log_M)).trace()-max_entryopy)*0.5 ##check if correct!
+                entropy_loss=entropy_loss+relative_entropy.real
+            return entropy_loss
+        else:
+            raise ValueError('divergence type not recognized')
 
     def objective(self, weights: np.ndarray) -> float:
         # output is of shape (N, num_outputs)
@@ -179,7 +195,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         latent=forward_result[1]
         
         val_1 =self.reconstruction_loss(matrix=output, vector=self._y)
-        val_2 =self.quantum_entropy(latent=latent)
+        val_2 =self.quantum_relative_entropy(latent=latent)
         val = (val_1+self._beta*val_2) / self._num_samples
         return val
     
