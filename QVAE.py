@@ -154,7 +154,6 @@ if __name__=="__main__":
     best_val_score=0
 
     for epoch in range(num_epoch):
-        print(Xtrain[0])
         model.fit(Xtrain, Xtrain)
         this_train_score=model.score(Xtrain, Xtrain)
         this_val_score=model.score(Xval, Xval)
