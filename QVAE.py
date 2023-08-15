@@ -42,11 +42,13 @@ if __name__=="__main__":
     parser.add_argument('--shuffle', required=False, type=bool, help='determines whether to shuffle data before alternating', default=False)
     parser.add_argument('--shuffleseed', required=False, type=int, help='a seed for use in shuffling the dataset, if left False and --shuffle=True, will be completely random', default=False)
     
-    parser.add_argument('-t','--num_trash_qubits', required=False, type=int, help='number of trash qubits', default=1)
+    parser.add_argument('-t','--num_trash_qubits', required=False, type=int, help='number of trash qubits, the first 0,...,N-1 qubits will be traced out in the latent space', default=1)
     parser.add_argument('--input_dim', required=False, type=int, help='customize the input data dimension, if zero the original input dimension is preserved', default=0)
     parser.add_argument('--reconstruction_loss', required=False, type=str, help='define the loss used in the reconstruction term of the objective', default='fidelity')
     parser.add_argument('--beta_weight', required=False, type=float, help='the beta parameter that controlls the relative weight of the quantum entropy term in the objective', default=1.0)
     parser.add_argument('--divergence_type', required=False, type=str, help='choose between KL-Divergence and JS-Divergence', default='JSD')
+    parser.add_argument('--num_auxiliary_encoder', required=False, type=int, help='number of auxiliary qubits in the encoder', default=0)
+    parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
 
     args = parser.parse_args()
 
@@ -78,6 +80,9 @@ if __name__=="__main__":
     if divergence_type not in ['KLD','JSD']:
         print('divergence type not recognized, use JSD instead')
         divergence_type='JSD'
+
+    num_auxiliary_encoder=args.num_auxiliary_encoder
+    num_auxiliary_decoder=args.num_auxiliary_decoder
     ##########
 
     if args.optimizer.lower() == 'cobyla':
@@ -135,16 +140,26 @@ if __name__=="__main__":
     assert(int(n_qubit)==n_qubit)
     n_qubit=int(n_qubit)
     x_params = ParameterVector('x',n_features)
-    tmp_gates=comb(n_qubit,2)     #number of gates for ising_interaction (zz) embedding, this number may change for another embedding
-    n_gates = (n_qubit+tmp_gates)*n_layers         
-    theta_params = ParameterVector('theta', 2*n_gates)
+    
+    # for encoder
+    n_qubit_e=n_qubit+num_auxiliary_encoder
 
-    num_encoder_params=n_gates
+    tmp_gates_e=comb(n_qubit_e,2)     #number of gates for ising_interaction (zz) embedding, this number may change for another embedding
+    n_gates_e = (n_qubit_e+tmp_gates_e)*n_layers         
 
-    qc_e=core.encoder(n_layers,n_qubit,theta_params[:num_encoder_params])
-    qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:])
+    # for decoder
+    n_qubit_d=n_qubit+num_auxiliary_decoder
+    tmp_gates_d=comb(n_qubit_d,2)
+    n_gates_d = (n_qubit_d+tmp_gates_d)*n_layers
 
-    qnn = core.QVAE_NN(circuit=qc_e, encoder=qc_e,decoder=qc_d,input_params=x_params, weight_params=theta_params,num_encoder_params=num_encoder_params,trash_qubits=trash_qubits)
+    theta_params = ParameterVector('theta', n_gates_e+n_gates_d)
+
+    num_encoder_params=n_gates_e
+
+    qc_e=core.encoder(n_layers,n_qubit,theta_params[:num_encoder_params],num_auxiliary_encoder)
+    qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:],num_auxiliary_decoder)
+
+    qnn = core.QVAE_NN(circuit=qc_e, encoder=qc_e,decoder=qc_d,input_params=x_params, weight_params=theta_params,num_encoder_params=num_encoder_params,trash_qubits=trash_qubits,num_auxiliary_encoder=num_auxiliary_encoder,num_auxiliary_decoder=num_auxiliary_decoder)
     #qnn = SamplerQNN(circuit=qc_e, input_params=x_params, weight_params=theta_params_e)
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
@@ -155,6 +170,7 @@ if __name__=="__main__":
 
     for epoch in range(num_epoch):
         model.fit(Xtrain, Xtrain)
+
         this_train_score=model.score(Xtrain, Xtrain)
         this_val_score=model.score(Xval, Xval)
         print(epoch,this_train_score,this_val_score)
@@ -177,4 +193,3 @@ if __name__=="__main__":
     print(f'best model train score: {trainscore}')
     print(f'best model test score: {testscore}')
     print(f'best model val score: {valscore}')
-  

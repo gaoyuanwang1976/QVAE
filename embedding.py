@@ -82,18 +82,19 @@ def ising_interaction(qc,x_params,theta,n_layers,n_qubit):
 
 
 
-def ising_interaction_noInput(qc,theta,n_layers,n_qubit):
+def ising_interaction_noInput(qc,theta,n_layers,n_qubit,num_auxiliary):
     typ=isinstance(theta,list)
     param_index=0
+    num_qubit_total=n_qubit+num_auxiliary
     for layer in range(n_layers):
 
-        for q1 in range(n_qubit):
-            for q2 in range(q1,n_qubit):
+        for q1 in range(num_qubit_total):
+            for q2 in range(q1,num_qubit_total):
                 if q1!=q2:
                     qc.rzz(theta[param_index],q1,q2)
                     param_index+=1
 
-        for q_tmp in range(n_qubit):
+        for q_tmp in range(num_qubit_total):
             qc.ry(theta[param_index],q_tmp)
             param_index+=1
 

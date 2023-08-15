@@ -20,7 +20,7 @@ import embedding
 
 class QVAE_NN(SamplerQNN):
 
-    def __init__(self,encoder: QuantumCircuit,decoder: QuantumCircuit,num_encoder_params:int,trash_qubits,**kwargs):
+    def __init__(self,encoder: QuantumCircuit,decoder: QuantumCircuit,num_encoder_params:int,trash_qubits,num_auxiliary_encoder,num_auxiliary_decoder,**kwargs):
             super(QVAE_NN, self).__init__(**kwargs)
             self._encoder = encoder.copy()
             if len(self._encoder.clbits) == 0:
@@ -28,6 +28,8 @@ class QVAE_NN(SamplerQNN):
             self._decoder = decoder.copy()
             self._num_encoder_params=num_encoder_params
             self._trash_qubits=trash_qubits
+            self._num_auxiliary_encoder=num_auxiliary_encoder
+            self._num_auxiliary_decoder=num_auxiliary_decoder
 
     def forward(self,input_data,weights):
         """
@@ -36,20 +38,24 @@ class QVAE_NN(SamplerQNN):
         num_encoder_params=self._num_encoder_params
         encoder_weights=weights[:num_encoder_params]
         decoder_weights=weights[num_encoder_params:]
+        #encoder_weights=[0]*num_encoder_params
+        #decoder_weights=[0]*(len(weights)-num_encoder_params)
+        
         trash_qubits=self._trash_qubits
         _, num_samples = self._preprocess_forward(input_data, encoder_weights)
 
         ### Encoder 
+        
         encoder_params=[encoder_weights]*num_samples # overwrite parameter_values to remove in the input data
         n_qubit = math.log2(len(input_data[0]))
         assert(int(n_qubit)==n_qubit)
         n_qubit=int(n_qubit)
         original_encoder=self._encoder.copy('original_e')
-
         qc_list=[]
         for i in range(num_samples):
-            qc_e=QuantumCircuit(n_qubit)
+            qc_e=QuantumCircuit(n_qubit+self._num_auxiliary_encoder)
             qc_e.initialize(input_data[i], range(n_qubit))
+            # input + auxiliary? !!! check
             qc_e=qc_e.compose(original_encoder)
             qc_list.append(qc_e)
 
@@ -57,26 +63,43 @@ class QVAE_NN(SamplerQNN):
         job = self.sampler.run(qc_list, encoder_params)
 
         try:
-            results = job.result()
+            results_tmp = job.result()
         except Exception as exc:
             raise QiskitMachineLearningError("Sampler job failed.") from exc
-        result = self._postprocess(num_samples, results) #full dimensional output 
+        result_tmp = self._postprocess(num_samples, results_tmp) #full dimensional output # Sampler returns probabilities
+        
+        ### partial trace over auxiliary qubits encoder 
+        result=[]
+        for probability in result_tmp:
+            state=np.sqrt(probability)
+            quantum_state=qi.Statevector(state)
+            auxiliary_qubits_e=range(n_qubit,n_qubit+self._num_auxiliary_encoder)
+            tmp_state=qi.partial_trace(quantum_state,auxiliary_qubits_e)
+            trace=tmp_state.trace()
+            tmp_state=tmp_state/trace
+            result.append(tmp_state) # reduced output by tracing out auxiliary qubits
+            
         if trash_qubits==None:
             reduced_result=result
         else:
             reduced_result=[]
-            for state in result:
-                quantum_state=qi.Statevector(state)
+            for quantum_state in result:
                 reduced_state=qi.partial_trace(quantum_state,trash_qubits)
                 trace=reduced_state.trace()
                 reduced_state=reduced_state/trace
                 reduced_result.append(reduced_state) # reduced output by tracing out trash qubits
-
+                
+        
         ### Decoder
         num_trash=2**len(trash_qubits)
         zero_state=np.zeros((num_trash,num_trash))
         zero_state[0][0]=1
         reconstruction_qubits=qi.DensityMatrix(zero_state)
+
+        num_aux=2**self._num_auxiliary_decoder
+        aux_state=np.zeros((num_aux,num_aux))
+        aux_state[0][0]=1
+        auxiliary_qubits=qi.DensityMatrix(aux_state)
         original_decoder=self._decoder.copy('original_d')
         qc_d=original_decoder.assign_parameters(decoder_weights,inplace=False)
         decoder_output=[]
@@ -84,10 +107,16 @@ class QVAE_NN(SamplerQNN):
         for item in reduced_result:
             latent_state=qi.DensityMatrix(item)
             latent_full=latent_state.tensor(reconstruction_qubits)
-
-            assert(2**n_qubit==latent_full.dim)
-            decoder_output.append(latent_full.evolve(qc_d))
-
+            #assert(2**n_qubit==latent_full.dim)
+            latent_full=latent_full.tensor(auxiliary_qubits)
+            ### partial trace over auxiliary qubits decoder 
+            quantum_state=latent_full.evolve(qc_d)
+            auxiliary_qubits_d=range(n_qubit,n_qubit+self._num_auxiliary_decoder)
+            tmp_state=qi.partial_trace(quantum_state,auxiliary_qubits_d) # reduced output by tracing out auxiliary qubits
+            trace=tmp_state.trace()
+            tmp_state=tmp_state/trace
+            decoder_output.append(tmp_state)
+        #print('\nhj',qi.DensityMatrix(input_data[0]),decoder_output[0])
         return decoder_output,reduced_result
 
 
@@ -203,12 +232,12 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         raise NotImplementedError
 
 
-def encoder(n_layers,n_qubit,theta_params):
-    qc=QuantumCircuit(n_qubit)
-    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit) 
+def encoder(n_layers,n_qubit,theta_params,num_auxiliary_encoder):
+    qc=QuantumCircuit(n_qubit+num_auxiliary_encoder)
+    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_encoder) 
     return qc
 
-def decoder(n_layers,n_qubit,theta_params):
-    qc=QuantumCircuit(n_qubit)
-    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit) 
+def decoder(n_layers,n_qubit,theta_params,num_auxiliary_decoder):
+    qc=QuantumCircuit(n_qubit+num_auxiliary_decoder)
+    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_decoder) 
     return qc
