@@ -1,6 +1,7 @@
 import numpy as np
-from qiskit import Aer, QuantumCircuit,execute
-from qiskit.providers.aer import QasmSimulator
+from qiskit import Aer, QuantumCircuit
+from qiskit.execute_function import execute
+from qiskit.providers.aer import AerSimulator
 import qiskit.quantum_info as qi
 from qiskit_machine_learning.neural_networks import SamplerQNN
 from qiskit_machine_learning.exceptions import QiskitMachineLearningError
@@ -8,6 +9,7 @@ from qiskit_machine_learning.algorithms import ObjectiveFunction
 from qiskit import QuantumCircuit
 from qiskit_machine_learning.algorithms import NeuralNetworkRegressor
 import scipy
+
 
 import math
 import os
@@ -23,8 +25,8 @@ class QVAE_NN(SamplerQNN):
     def __init__(self,encoder: QuantumCircuit,decoder: QuantumCircuit,num_encoder_params:int,trash_qubits,num_auxiliary_encoder,num_auxiliary_decoder,**kwargs):
             super(QVAE_NN, self).__init__(**kwargs)
             self._encoder = encoder.copy()
-            if len(self._encoder.clbits) == 0:
-                self._encoder.measure_all()
+            #if len(self._encoder.clbits) == 0:
+            #    self._encoder.measure_all()
             self._decoder = decoder.copy()
             self._num_encoder_params=num_encoder_params
             self._trash_qubits=trash_qubits
@@ -38,40 +40,45 @@ class QVAE_NN(SamplerQNN):
         num_encoder_params=self._num_encoder_params
         encoder_weights=weights[:num_encoder_params]
         decoder_weights=weights[num_encoder_params:]
-        #encoder_weights=[0]*num_encoder_params
-        #decoder_weights=[0]*(len(weights)-num_encoder_params)
+        encoder_weights=[0]*num_encoder_params
+        decoder_weights=[0]*(len(weights)-num_encoder_params)
         
         trash_qubits=self._trash_qubits
         _, num_samples = self._preprocess_forward(input_data, encoder_weights)
 
         ### Encoder 
         
-        encoder_params=[encoder_weights]*num_samples # overwrite parameter_values to remove in the input data
+        #encoder_params=[encoder_weights]*num_samples # overwrite parameter_values to remove in the input data
         n_qubit = math.log2(len(input_data[0]))
         assert(int(n_qubit)==n_qubit)
         n_qubit=int(n_qubit)
         original_encoder=self._encoder.copy('original_e')
-        qc_list=[]
+
+        my_encoder=original_encoder.assign_parameters(encoder_weights)
+        backend=AerSimulator(method='statevector')
+
+        #qc_list=[]
+        result_tmp=[]
         for i in range(num_samples):
             qc_e=QuantumCircuit(n_qubit+self._num_auxiliary_encoder)
             qc_e.initialize(input_data[i], range(n_qubit))
             # input + auxiliary? !!! check
-            qc_e=qc_e.compose(original_encoder)
-            qc_list.append(qc_e)
+            qc_e=qc_e.compose(my_encoder)
+            state_vector = qi.Statevector.from_instruction(qc_e) 
+            result_tmp.append(state_vector)
 
         # sampler allows batching
-        job = self.sampler.run(qc_list, encoder_params)
+        #job = self.sampler.run(qc_list, encoder_params)
 
-        try:
-            results_tmp = job.result()
-        except Exception as exc:
-            raise QiskitMachineLearningError("Sampler job failed.") from exc
-        result_tmp = self._postprocess(num_samples, results_tmp) #full dimensional output # Sampler returns probabilities
+        #try:
+        #    results_tmp = job.result()
+        #except Exception as exc:
+        #    raise QiskitMachineLearningError("Sampler job failed.") from exc
+        #result_tmp = self._postprocess(num_samples, results_tmp) #full dimensional output # Sampler returns probabilities
         
         ### partial trace over auxiliary qubits encoder 
         result=[]
-        for probability in result_tmp:
-            state=np.sqrt(probability)
+        for state in result_tmp:
             quantum_state=qi.Statevector(state)
             auxiliary_qubits_e=range(n_qubit,n_qubit+self._num_auxiliary_encoder)
             tmp_state=qi.partial_trace(quantum_state,auxiliary_qubits_e)
