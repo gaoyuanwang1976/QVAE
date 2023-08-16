@@ -40,8 +40,8 @@ class QVAE_NN(SamplerQNN):
         num_encoder_params=self._num_encoder_params
         encoder_weights=weights[:num_encoder_params]
         decoder_weights=weights[num_encoder_params:]
-        encoder_weights=[0]*num_encoder_params
-        decoder_weights=[0]*(len(weights)-num_encoder_params)
+        #encoder_weights=[0]*num_encoder_params
+        #decoder_weights=[0]*(len(weights)-num_encoder_params)
         
         trash_qubits=self._trash_qubits
         _, num_samples = self._preprocess_forward(input_data, encoder_weights)
