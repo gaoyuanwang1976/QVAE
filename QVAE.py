@@ -1,14 +1,8 @@
 import numpy as np
-#import matplotlib.pyplot as plt
-from qiskit import Aer
-from qiskit.utils import QuantumInstance
 from qiskit.circuit import ParameterVector
 from qiskit.algorithms.optimizers import COBYLA, SPSA, ADAM
 
-from qiskit_machine_learning.neural_networks import CircuitQNN,SamplerQNN
-from qiskit_machine_learning.algorithms import NeuralNetworkRegressor
-
-from qiskit.utils import algorithm_globals
+import qiskit.quantum_info as qi
 #algorithm_globals.random_seed = 42
 import math
 import core
@@ -49,6 +43,7 @@ if __name__=="__main__":
     parser.add_argument('--divergence_type', required=False, type=str, help='choose between KL-Divergence and JS-Divergence', default='JSD')
     parser.add_argument('--num_auxiliary_encoder', required=False, type=int, help='number of auxiliary qubits in the encoder', default=0)
     parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
+    parser.add_argument('--global_reconstruction_loss', action='store_true', help='whether global reconstruction loss is used')
 
     args = parser.parse_args()
 
@@ -127,9 +122,7 @@ if __name__=="__main__":
     Xtest=((Xtest-minData)/(maxData-minData)*np.pi).T[:n_dim].T
     Xtrain=preprocessing.normalize_amplitude(Xtrain)
     Xval=preprocessing.normalize_amplitude(Xval)
-    Xtest=preprocessing.normalize_amplitude(Xtest)
-
-
+    Xtest=preprocessing.normalize_amplitude(Xtest)     
 
 #######################
 ##### circuit def #####
@@ -166,13 +159,42 @@ if __name__=="__main__":
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
     model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type)
 
+    ### convert input into density matrices ###
+    Xtrain_dm=[]
+    Xtest_dm=[]
+    Xval_dm=[]
+    if args.global_reconstruction_loss == True:
+        combined_state_tr=np.zeros((len(Xtrain[0]),len(Xtrain[0])))
+        combined_state_te=np.zeros((len(Xtest[0]),len(Xtest[0])))
+        combined_state_va=np.zeros((len(Xval[0]),len(Xval[0])))
 
+    for x in Xtrain:
+        Xtrain_dm.append(qi.DensityMatrix(x).data)
+        if args.global_reconstruction_loss == True:
+            combined_state_tr=combined_state_tr+Xtrain_dm[-1]*1./len(Xtrain)
+    for x in Xval:
+        Xval_dm.append(qi.DensityMatrix(x).data)
+        if args.global_reconstruction_loss == True:
+            combined_state_va=combined_state_va+Xval_dm[-1]*1./len(Xval)
+    for x in Xtest:
+        Xtest_dm.append(qi.DensityMatrix(x).data)
+        if args.global_reconstruction_loss == True:
+            combined_state_te=combined_state_te+Xtest_dm[-1]*1./len(Xtest)
 
+    if args.global_reconstruction_loss == True:
+        Xtrain=np.array([combined_state_tr])
+        Xtest=np.array([combined_state_te])
+        Xval=np.array([combined_state_va])
 
+    else:
+        Xtrain=np.array(Xtrain_dm)
+        Xtest=np.array(Xtest_dm)
+        Xval=np.array(Xval_dm)
 
     best_val_score=0
 
     for epoch in range(num_epoch):
+        print('start fitting')
         model.fit(Xtrain, Xtrain)
 
         this_train_score=model.score(Xtrain, Xtrain)

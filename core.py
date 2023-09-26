@@ -44,7 +44,8 @@ class QVAE_NN(SamplerQNN):
         #decoder_weights=[0]*(len(weights)-num_encoder_params)
         
         trash_qubits=self._trash_qubits
-        _, num_samples = self._preprocess_forward(input_data, encoder_weights)
+        #_, num_samples = self._preprocess_forward(input_data, encoder_weights)
+        num_samples=len(input_data)
 
         ### Encoder 
         
@@ -57,6 +58,8 @@ class QVAE_NN(SamplerQNN):
         my_encoder=original_encoder.assign_parameters(encoder_weights)
         backend=AerSimulator(method='statevector')
 
+        '''
+        ### state vector version encoder 
         #qc_list=[]
         result_tmp=[]
         for i in range(num_samples):
@@ -76,7 +79,28 @@ class QVAE_NN(SamplerQNN):
             trace=tmp_state.trace()
             tmp_state=tmp_state/trace
             result.append(tmp_state) # reduced output by tracing out auxiliary qubits
-            
+        '''
+
+        ### DensityMatrix version encoder 
+        result_tmp=[]
+        for i in range(num_samples):
+            my_state=qi.DensityMatrix(input_data[i])
+            num_aux_en=2**self._num_auxiliary_encoder
+            aux_state_en=np.zeros((num_aux_en,num_aux_en))
+            aux_state_en[0][0]=1
+            auxiliary_qubits_en=qi.DensityMatrix(aux_state_en)
+            my_state=my_state.tensor(auxiliary_qubits_en)
+            my_state=my_state.evolve(my_encoder)
+            result_tmp.append(my_state)
+
+        result=[]
+        for state in result_tmp:
+            auxiliary_qubits_e=range(n_qubit,n_qubit+self._num_auxiliary_encoder)
+            tmp_state=qi.partial_trace(state,auxiliary_qubits_e)
+            trace=tmp_state.trace()
+            tmp_state=tmp_state/trace
+            result.append(tmp_state) # reduced output by tracing out auxiliary qubits
+
         if trash_qubits==None:
             reduced_result=result
         else:
@@ -114,9 +138,7 @@ class QVAE_NN(SamplerQNN):
             trace=tmp_state.trace()
             tmp_state=tmp_state/trace
             decoder_output.append(tmp_state)
-        #print('\nhj',qi.DensityMatrix(input_data[0]),decoder_output[0])
         return decoder_output,reduced_result
-
 
 class QVAE_trainer(NeuralNetworkRegressor):
     def __init__(self,beta,divergence_type,reconstruction_loss='fidelity',**kwargs):
