@@ -34,7 +34,7 @@ if __name__=="__main__":
     parser.add_argument('-e','--epochs', required=False, type=int, help='the desired number of epochs to run', default=10)
     parser.add_argument('-p','--patience', required=False, type=int, help='upper limit for the patience counter used in validation', default=5)
     parser.add_argument('--num_layers', required = False, type=int, help='determines the number of alternating layers in the circuit', default=1)
-    parser.add_argument('-i', '--import_data', required=False, help='path to the input file', default='dataset/data_1')
+    parser.add_argument('-i', '--import_data', required=False, help='path to the input file', default='dataset/data_all_cont4')
     parser.add_argument('--partition_size', required=False, help='sets partition size for splitting data into train, test, and validation sets (scales the partition_ratio arg)', default='max')
     parser.add_argument('--partition_ratio', required=False, type=str, help="governs the ration of partition sizes in the training, validation, and test sets. a list of the form [train, val, test]", default="0.4:0.3:0.3")
     parser.add_argument('-o','--optimizer', required=False, type=str, help='determines the Qiskit optimizer used in qnn', default='cobyla')
@@ -70,7 +70,7 @@ if __name__=="__main__":
     trash_qubits=list(range(args.num_trash_qubits))
 
     reconstruction_loss=args.reconstruction_loss
-    if reconstruction_loss not in ['cross_entropy','fidelity']:
+    if reconstruction_loss not in ['cross_entropy','fidelity','wasserstein']:
         reconstruction_loss='fidelity'
         print('reconstruction loss choice not recognized, using fidelity loss')
 
@@ -165,6 +165,10 @@ if __name__=="__main__":
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
     model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type)
+
+
+
+
 
     best_val_score=0
 

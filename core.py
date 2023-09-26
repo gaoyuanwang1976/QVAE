@@ -66,15 +66,6 @@ class QVAE_NN(SamplerQNN):
             qc_e=qc_e.compose(my_encoder)
             state_vector = qi.Statevector.from_instruction(qc_e) 
             result_tmp.append(state_vector)
-
-        # sampler allows batching
-        #job = self.sampler.run(qc_list, encoder_params)
-
-        #try:
-        #    results_tmp = job.result()
-        #except Exception as exc:
-        #    raise QiskitMachineLearningError("Sampler job failed.") from exc
-        #result_tmp = self._postprocess(num_samples, results_tmp) #full dimensional output # Sampler returns probabilities
         
         ### partial trace over auxiliary qubits encoder 
         result=[]
@@ -178,21 +169,36 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         self._divergence_type=divergence_type
 
     def reconstruction_loss(self,matrix,vector):
-        sum=0
-        for v,m in zip(vector,matrix):
-            if self._reconstruction_loss=='cross_entropy':
-                m=qi.DensityMatrix(scipy.linalg.logm(m)/np.log(2.0))
-                trace=m.trace()
-                m=m/trace
-                current_fidelity=qi.state_fidelity(m,v,validate=False) # m has difficulty getting trace one
-            elif self._reconstruction_loss=='fidelity':
-                current_fidelity=qi.state_fidelity(m,v,validate=True)
-            else:
-                raise ValueError('reconstruction loss type not recognized')
+        if self._reconstruction_loss=='wasserstein':
+            combined_state=np.zeros((len(vector[0])*len(vector[0]),len(vector[0])*len(vector[0])))
+            #combined_state=qi.DensityMatrix(zero_matrix)
+            num_data=len(vector)
+            for v,m in zip(vector,matrix):
+                input_densityMatrix=qi.DensityMatrix(v)
+                in_out_state=qi.DensityMatrix(m).expand(input_densityMatrix)
+                combined_state=(combined_state+in_out_state.data*1./num_data)
+            cost=0
+            for i in range(len(combined_state)):
+                for j in range(i,len(combined_state[i])):
+                    cost=cost+np.square(combined_state[i][j]-combined_state[j][i])
+            return cost.real
+        
+        else:
+            sum=0
+            for v,m in zip(vector,matrix):
+                if self._reconstruction_loss=='cross_entropy':
+                    m=qi.DensityMatrix(scipy.linalg.logm(m)/np.log(2.0))
+                    trace=m.trace()
+                    m=m/trace
+                    current_fidelity=qi.state_fidelity(m,v,validate=False) # m has difficulty getting trace one
+                elif self._reconstruction_loss=='fidelity':
+                    current_fidelity=qi.state_fidelity(m,v,validate=True)
+                else:
+                    raise ValueError('reconstruction loss type not recognized')
 
-            sum=sum+current_fidelity
-        return -sum
-    
+                sum=sum+current_fidelity
+            return -sum
+        
     def quantum_relative_entropy(self,latent):
         type_divergence=self._divergence_type
         entropy_loss=0
