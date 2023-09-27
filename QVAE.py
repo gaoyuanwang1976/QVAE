@@ -44,6 +44,7 @@ if __name__=="__main__":
     parser.add_argument('--num_auxiliary_encoder', required=False, type=int, help='number of auxiliary qubits in the encoder', default=0)
     parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
     parser.add_argument('--global_reconstruction_loss', action='store_true', help='whether global reconstruction loss is used')
+    parser.add_argument('--global_regularization', action='store_true', help='whether global regularization is used')
 
     args = parser.parse_args()
 
@@ -78,6 +79,10 @@ if __name__=="__main__":
 
     num_auxiliary_encoder=args.num_auxiliary_encoder
     num_auxiliary_decoder=args.num_auxiliary_decoder
+
+    if args.global_reconstruction_loss==True:
+        args.global_regularization=True
+        print('Global regularization must be TRUE if global reconstruction loss is used.')
     ##########
 
     if args.optimizer.lower() == 'cobyla':
@@ -157,7 +162,7 @@ if __name__=="__main__":
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
-    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type)
+    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type,global_regularizer_flag=args.global_regularization)
 
     ### convert input into density matrices ###
     Xtrain_dm=[]
