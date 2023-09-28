@@ -3,7 +3,8 @@ from qiskit.circuit import ParameterVector
 from qiskit.algorithms.optimizers import COBYLA, SPSA, ADAM
 
 import qiskit.quantum_info as qi
-#algorithm_globals.random_seed = 42
+from qiskit.utils import algorithm_globals
+#algorithm_globals.random_seed = 0
 import math
 import core
 import preprocessing
@@ -73,7 +74,7 @@ if __name__=="__main__":
     beta_weight=args.beta_weight
 
     divergence_type=args.divergence_type
-    if divergence_type not in ['KLD','JSD']:
+    if divergence_type not in ['KLD','JSD','wasserstein']:
         print('divergence type not recognized, use JSD instead')
         divergence_type='JSD'
 
@@ -195,6 +196,7 @@ if __name__=="__main__":
         Xtrain=np.array(Xtrain_dm)
         Xtest=np.array(Xtest_dm)
         Xval=np.array(Xval_dm)
+
 
     best_val_score=0
 

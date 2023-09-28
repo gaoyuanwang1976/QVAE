@@ -7,9 +7,10 @@ from qiskit_machine_learning.neural_networks import SamplerQNN
 from qiskit_machine_learning.exceptions import QiskitMachineLearningError
 from qiskit_machine_learning.algorithms import ObjectiveFunction
 from qiskit import QuantumCircuit
+from qiskit.extensions import UnitaryGate
 from qiskit_machine_learning.algorithms import NeuralNetworkRegressor
 import scipy
-
+import time
 
 import math
 import os
@@ -47,16 +48,12 @@ class QVAE_NN(SamplerQNN):
         #_, num_samples = self._preprocess_forward(input_data, encoder_weights)
         num_samples=len(input_data)
 
-        ### Encoder 
-        
-        #encoder_params=[encoder_weights]*num_samples # overwrite parameter_values to remove in the input data
+        ### Encoder
         n_qubit = math.log2(len(input_data[0]))
         assert(int(n_qubit)==n_qubit)
         n_qubit=int(n_qubit)
         original_encoder=self._encoder.copy('original_e')
-
         my_encoder=original_encoder.assign_parameters(encoder_weights)
-        backend=AerSimulator(method='statevector')
 
         '''
         ### state vector version encoder 
@@ -194,17 +191,27 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
 
     def reconstruction_loss(self,matrix,vector):
         if self._reconstruction_loss=='wasserstein':
-            combined_state=np.zeros((len(vector[0])*len(vector[0]),len(vector[0])*len(vector[0])))
-            #combined_state=qi.DensityMatrix(zero_matrix)
             num_data=len(vector)
+
+            dim=len(vector[0])
+            n_qubits_latent=int(2*math.log2(dim))
+            swap_circuit = QuantumCircuit(n_qubits_latent,0)
+            for i in range(int(n_qubits_latent*0.5)):
+                swap_circuit.swap(i, int(n_qubits_latent*0.5)+i)
+            backend = Aer.get_backend('unitary_simulator')
+            job=execute(swap_circuit,backend,shots=100)
+            result=job.result()
+            swap=result.get_unitary(swap_circuit,3).data
+            identity_matrix=np.identity(dim*dim)
+            C=0.5*(identity_matrix-swap)
+
+            cost=0
+            pi_state=np.zeros((len(vector[0])*len(vector[0]),len(vector[0])*len(vector[0])))
             for v,m in zip(vector,matrix):
                 input_densityMatrix=qi.DensityMatrix(v)
                 in_out_state=qi.DensityMatrix(m).expand(input_densityMatrix)
-                combined_state=(combined_state+in_out_state.data*1./num_data)
-            cost=0
-            for i in range(len(combined_state)):
-                for j in range(i,len(combined_state[i])):
-                    cost=cost+np.square(combined_state[i][j]-combined_state[j][i])
+                pi_state=(pi_state+in_out_state.data*1./num_data)
+                cost=cost+np.trace(np.matmul(pi_state,C))
             return cost.real
         
         else:
@@ -278,6 +285,35 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     relative_entropy=(-qi.DensityMatrix(np.dot(state,log_M)).trace()-my_entropy-qi.DensityMatrix(np.dot(max_mixed_state,log_M)).trace()-max_entryopy)*0.5 ##check if correct!
                     entropy_loss=entropy_loss+relative_entropy.real
                 return entropy_loss
+        elif type_divergence=='wasserstein':
+            dim=latent[0].dim
+            max_mixed_state=np.diag(np.full(dim,1/dim))
+
+            n_qubits_latent=int(2*math.log2(dim))
+            swap_circuit = QuantumCircuit(n_qubits_latent,0)
+            for i in range(int(n_qubits_latent*0.5)):
+                swap_circuit.swap(i, int(n_qubits_latent*0.5)+i)
+            backend = Aer.get_backend('unitary_simulator')
+            job=execute(swap_circuit,backend,shots=100)
+            result=job.result()
+            swap=result.get_unitary(swap_circuit,3).data
+            identity_matrix=np.identity(dim*dim)
+            C=0.5*(identity_matrix-swap)
+
+            if self._global_regularizer_flag==True:
+                combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
+                for state in latent:
+                    combined_state=combined_state+state.data*1./len(latent)
+                pi_state=(qi.DensityMatrix(max_mixed_state).expand(combined_state)).data
+                cost=np.trace(np.matmul(pi_state,C))
+                return cost.real
+
+            else:
+                cost=0
+                for state in latent:          
+                    pi_state=(qi.DensityMatrix(max_mixed_state).expand(state)).data
+                    cost=cost+np.trace(np.matmul(pi_state,C))
+                return cost.real
         else:
             raise ValueError('divergence type not recognized')
 
