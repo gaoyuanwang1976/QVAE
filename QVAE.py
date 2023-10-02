@@ -74,7 +74,7 @@ if __name__=="__main__":
     beta_weight=args.beta_weight
 
     divergence_type=args.divergence_type
-    if divergence_type not in ['KLD','JSD','wasserstein']:
+    if divergence_type not in ['KLD','JSD']:
         print('divergence type not recognized, use JSD instead')
         divergence_type='JSD'
 
@@ -204,8 +204,8 @@ if __name__=="__main__":
         print('start fitting')
         model.fit(Xtrain, Xtrain)
 
-        this_train_score=model.score(Xtrain, Xtrain)
-        this_val_score=model.score(Xval, Xval)
+        this_train_score=model.score(Xtrain, Xtrain,reconstruction_loss)
+        this_val_score=model.score(Xval, Xval,reconstruction_loss)
         print(epoch,this_train_score,this_val_score)
 
         if this_val_score > best_val_score: #validation wrapper
@@ -220,9 +220,9 @@ if __name__=="__main__":
             print("ran out of patience")
             break
 
-    trainscore = best_model.score(Xtrain, Xtrain)
-    testscore = best_model.score(Xtest, Xtest)
-    valscore = best_model.score(Xval, Xval)
+    trainscore = best_model.score(Xtrain, Xtrain,reconstruction_loss)
+    testscore = best_model.score(Xtest, Xtest,reconstruction_loss)
+    valscore = best_model.score(Xval, Xval,reconstruction_loss)
     print(f'best model train score: {trainscore}')
     print(f'best model test score: {testscore}')
     print(f'best model val score: {valscore}')

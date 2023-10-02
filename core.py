@@ -1,17 +1,11 @@
 import numpy as np
 from qiskit import Aer, QuantumCircuit
 from qiskit.execute_function import execute
-from qiskit.providers.aer import AerSimulator
 import qiskit.quantum_info as qi
 from qiskit_machine_learning.neural_networks import SamplerQNN
-from qiskit_machine_learning.exceptions import QiskitMachineLearningError
 from qiskit_machine_learning.algorithms import ObjectiveFunction
-from qiskit import QuantumCircuit
-from qiskit.extensions import UnitaryGate
 from qiskit_machine_learning.algorithms import NeuralNetworkRegressor
 import scipy
-import time
-
 import math
 import os
 abspath = os.path.abspath('__file__')
@@ -79,13 +73,14 @@ class QVAE_NN(SamplerQNN):
         '''
 
         ### DensityMatrix version encoder 
-        result_tmp=[]
+
         for i in range(num_samples):
-            my_state=qi.DensityMatrix(input_data[i])
+            result_tmp=[]
             num_aux_en=2**self._num_auxiliary_encoder
             aux_state_en=np.zeros((num_aux_en,num_aux_en))
             aux_state_en[0][0]=1
             auxiliary_qubits_en=qi.DensityMatrix(aux_state_en)
+            my_state=qi.DensityMatrix(input_data[i])
             my_state=my_state.tensor(auxiliary_qubits_en)
             my_state=my_state.evolve(my_encoder)
             result_tmp.append(my_state)
@@ -151,12 +146,35 @@ class QVAE_trainer(NeuralNetworkRegressor):
         function = DensityMatrix_ObjectiveFunction(X=X, y=y, neural_network=self._neural_network,loss=self._loss,reconstruction_loss=self._reconstruction_loss,beta=self._beta,divergence_type=self._divergence_type,global_regularizer_flag=self._global_regularizer_flag)
         return self._minimize(function)
     
-    def score(self, X, y):
+    def score_fidelity(self, X, y):
         y_pred = self.predict(X)[0]
         fidelity_score=0
         for i,j in zip(y_pred,y):
             fidelity_score =fidelity_score+qi.state_fidelity(i,j,validate=True)
         return fidelity_score/len(y)
+    
+    def score(self, X, y, loss_type):
+        y_pred = self.predict(X)[0]
+        if loss_type=='fidelity':
+            score=0
+            for i,j in zip(y_pred,y):
+                score =score+qi.state_fidelity(i,j,validate=True)
+            return score/len(y)
+        elif loss_type=='cross_entropy':
+            score=0
+            for i,j in zip(y_pred,y):
+                i=qi.DensityMatrix(scipy.linalg.logm(i)/np.log(2.0))
+                trace=i.trace()
+                i=i/trace
+                score=score+qi.state_fidelity(i,j,validate=False)
+            return score/len(y)
+        elif loss_type=='wasserstein': #use fidelity for now
+            score=0
+            for i,j in zip(y_pred,y):
+                score =score+qi.state_fidelity(i,j,validate=True)
+            return score/len(y)
+        else:
+            raise ValueError('reconstruction loss type not recognized')
 
 class StateVector_ObjectiveFunction(ObjectiveFunction):
 
@@ -211,7 +229,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                 input_densityMatrix=qi.DensityMatrix(v)
                 in_out_state=qi.DensityMatrix(m).expand(input_densityMatrix)
                 pi_state=(pi_state+in_out_state.data*1./num_data)
-                cost=cost+np.trace(np.matmul(pi_state,C))
+            cost=np.trace(np.matmul(pi_state,C))
             return cost.real
         
         else:
@@ -285,7 +303,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     relative_entropy=(-qi.DensityMatrix(np.dot(state,log_M)).trace()-my_entropy-qi.DensityMatrix(np.dot(max_mixed_state,log_M)).trace()-max_entryopy)*0.5 ##check if correct!
                     entropy_loss=entropy_loss+relative_entropy.real
                 return entropy_loss
-        elif type_divergence=='wasserstein':
+        elif type_divergence=='wasserstein': #this definition of \pi is bad for two mixed states.
             dim=latent[0].dim
             max_mixed_state=np.diag(np.full(dim,1/dim))
 
@@ -312,7 +330,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                 cost=0
                 for state in latent:          
                     pi_state=(qi.DensityMatrix(max_mixed_state).expand(state)).data
-                    cost=cost+np.trace(np.matmul(pi_state,C))
+                    cost=cost+np.trace(np.matmul(pi_state,C))/len(latent)
                 return cost.real
         else:
             raise ValueError('divergence type not recognized')
