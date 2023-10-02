@@ -73,9 +73,8 @@ class QVAE_NN(SamplerQNN):
         '''
 
         ### DensityMatrix version encoder 
-
+        result_tmp=[]
         for i in range(num_samples):
-            result_tmp=[]
             num_aux_en=2**self._num_auxiliary_encoder
             aux_state_en=np.zeros((num_aux_en,num_aux_en))
             aux_state_en[0][0]=1
@@ -240,13 +239,14 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     trace=m.trace()
                     m=m/trace
                     current_fidelity=qi.state_fidelity(m,v,validate=False) # m has difficulty getting trace one
+                    sum+=current_fidelity
                 elif self._reconstruction_loss=='fidelity':
                     current_fidelity=qi.state_fidelity(m,v,validate=True)
+                    sum+=current_fidelity
                 else:
                     raise ValueError('reconstruction loss type not recognized')
-
-                sum=sum+current_fidelity
-            return -sum
+                
+            return -sum*1./len(vector)
         
     def quantum_relative_entropy(self,latent):
         type_divergence=self._divergence_type
@@ -272,7 +272,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     log_state=scipy.linalg.logm(state)/np.log(2.0) # in base 2
                     relative_entropy=-qi.DensityMatrix(np.dot(max_mixed_state,log_state)).trace()-max_entropy #KL(a||b), a is actual, b is predict
                     entropy_loss=entropy_loss+relative_entropy.real
-                return entropy_loss
+                return entropy_loss*1./len(latent)
 
         ## analogy Jensen-Shannon divergence
         elif type_divergence=='JSD':
@@ -302,8 +302,9 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     #JSD(a||b)=0.5*KL(a||M)+0.5*KL(b||M), M=0.5a+0.5b
                     relative_entropy=(-qi.DensityMatrix(np.dot(state,log_M)).trace()-my_entropy-qi.DensityMatrix(np.dot(max_mixed_state,log_M)).trace()-max_entryopy)*0.5 ##check if correct!
                     entropy_loss=entropy_loss+relative_entropy.real
-                return entropy_loss
-        elif type_divergence=='wasserstein': #this definition of \pi is bad for two mixed states.
+                return entropy_loss*1./len(latent)
+            
+        elif type_divergence=='wasserstein': #this definition of \pi is bad for two mixed states. Do not use
             dim=latent[0].dim
             max_mixed_state=np.diag(np.full(dim,1/dim))
 
@@ -343,7 +344,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         
         val_1 =self.reconstruction_loss(matrix=output, vector=self._y)
         val_2 =self.quantum_relative_entropy(latent=latent)
-        val = (val_1+self._beta*val_2) / self._num_samples #minimize
+        val = val_1+self._beta*val_2 #minimize, normalization is in val_1 and val_2
         return val
     
     def gradient(self, weights: np.ndarray) -> np.ndarray:
