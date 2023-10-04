@@ -12,6 +12,7 @@ abspath = os.path.abspath('__file__')
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 import embedding
+import copy
 
 
 
@@ -240,12 +241,14 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     m=m/trace
                     current_fidelity=qi.state_fidelity(m,v,validate=False) # m has difficulty getting trace one
                     sum+=current_fidelity
+                    #print(sum,current_fidelity)
                 elif self._reconstruction_loss=='fidelity':
                     current_fidelity=qi.state_fidelity(m,v,validate=True)
                     sum+=current_fidelity
+
                 else:
                     raise ValueError('reconstruction loss type not recognized')
-                
+            #print(sum)
             return -sum*1./len(vector)
         
     def quantum_relative_entropy(self,latent):

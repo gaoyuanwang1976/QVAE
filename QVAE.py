@@ -163,7 +163,7 @@ if __name__=="__main__":
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
-    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type,global_regularizer_flag=args.global_regularization)
+    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(maxiter=100),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type,global_regularizer_flag=args.global_regularization)
 
     ### convert input into density matrices ###
     Xtrain_dm=[]
@@ -204,8 +204,8 @@ if __name__=="__main__":
         print('start fitting')
         model.fit(Xtrain, Xtrain)
 
-        this_train_score=model.score(Xtrain, Xtrain,reconstruction_loss)
-        this_val_score=model.score(Xval, Xval,reconstruction_loss)
+        this_train_score=model.score(Xtrain, Xtrain,'fidelity')
+        this_val_score=model.score(Xval, Xval,'fidelity')
         print(epoch,this_train_score,this_val_score)
 
         if this_val_score > best_val_score: #validation wrapper
@@ -220,9 +220,9 @@ if __name__=="__main__":
             print("ran out of patience")
             break
 
-    trainscore = best_model.score(Xtrain, Xtrain,reconstruction_loss)
-    testscore = best_model.score(Xtest, Xtest,reconstruction_loss)
-    valscore = best_model.score(Xval, Xval,reconstruction_loss)
+    trainscore = best_model.score(Xtrain, Xtrain,'fidelity')
+    testscore = best_model.score(Xtest, Xtest,'fidelity')
+    valscore = best_model.score(Xval, Xval,'fidelity')
     print(f'best model train score: {trainscore}')
     print(f'best model test score: {testscore}')
     print(f'best model val score: {valscore}')
