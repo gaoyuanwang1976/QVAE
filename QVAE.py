@@ -74,7 +74,7 @@ if __name__=="__main__":
     beta_weight=args.beta_weight
 
     regularizer_type=args.regularizer_type
-    if regularizer_type not in ['KLD','JSD']:
+    if regularizer_type not in ['KLD','JSD','fidelity']:
         print('divergence type not recognized, use JSD instead')
         regularizer_type='JSD'
 
