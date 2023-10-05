@@ -16,7 +16,7 @@ import os
 abspath = os.path.abspath('__file__')
 dname = os.path.dirname(abspath)
 os.chdir(dname)
-
+import sys
 import argparse
 
 #for performance metrics
@@ -198,15 +198,17 @@ if __name__=="__main__":
         Xval=np.array(Xval_dm)
 
 
-    best_val_score=0
+    best_val_score=-sys.maxsize
 
     for epoch in range(num_epoch):
         print('start fitting')
         model.fit(Xtrain, Xtrain)
 
-        this_train_score=model.score(Xtrain, Xtrain,'fidelity')
-        this_val_score=model.score(Xval, Xval,'fidelity')
-        print(epoch,this_train_score,this_val_score)
+        this_train_score=model.score(Xtrain, Xtrain,reconstruction_loss)
+        this_val_score=model.score(Xval, Xval,reconstruction_loss)
+        this_train_fidelity=model.score(Xtrain, Xtrain,'fidelity')
+        this_val_fidelity=model.score(Xval, Xval,'fidelity')
+        print(epoch,this_train_fidelity,this_val_fidelity,this_val_score)
 
         if this_val_score > best_val_score: #validation wrapper
             best_val_epoch = epoch

@@ -160,19 +160,38 @@ class QVAE_trainer(NeuralNetworkRegressor):
             for i,j in zip(y_pred,y):
                 score =score+qi.state_fidelity(i,j,validate=True)
             return score/len(y)
+        
         elif loss_type=='cross_entropy':
             score=0
-            for i,j in zip(y_pred,y):
-                i=qi.DensityMatrix(scipy.linalg.logm(i)/np.log(2.0))
-                trace=i.trace()
-                i=i/trace
-                score=score+qi.state_fidelity(i,j,validate=False)
-            return score/len(y)
+            for m,v in zip(y_pred,y):
+                input_state_entropy=qi.entropy(v)
+                log_state=qi.DensityMatrix(scipy.linalg.logm(m/np.log(2.0)))
+                relative_entropy=-qi.DensityMatrix(np.dot(v,log_state)).trace()-input_state_entropy
+                score+=relative_entropy.real
+            return -score/len(y)
         elif loss_type=='wasserstein': #use fidelity for now
-            score=0
-            for i,j in zip(y_pred,y):
-                score =score+qi.state_fidelity(i,j,validate=True)
-            return score/len(y)
+            num_data=len(X)
+
+            dim=len(X[0])
+            n_qubits_latent=int(2*math.log2(dim))
+            swap_circuit = QuantumCircuit(n_qubits_latent,0)
+            for i in range(int(n_qubits_latent*0.5)):
+                swap_circuit.swap(i, int(n_qubits_latent*0.5)+i)
+            backend = Aer.get_backend('unitary_simulator')
+            job=execute(swap_circuit,backend,shots=100)
+            result=job.result()
+            swap=result.get_unitary(swap_circuit,3).data
+            identity_matrix=np.identity(dim*dim)
+            C=0.5*(identity_matrix-swap)
+
+            cost=0
+            pi_state=np.zeros((len(X[0])*len(X[0]),len(X[0])*len(X[0])))
+            for v,m in zip(y,y_pred):
+                input_densityMatrix=qi.DensityMatrix(v)
+                in_out_state=qi.DensityMatrix(m).expand(input_densityMatrix)
+                pi_state=(pi_state+in_out_state.data*1./num_data)
+            cost=np.trace(np.matmul(pi_state,C))
+            return -cost.real
         else:
             raise ValueError('reconstruction loss type not recognized')
 
@@ -233,23 +252,26 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
             return cost.real
         
         else:
-            sum=0
-            for v,m in zip(vector,matrix):
-                if self._reconstruction_loss=='cross_entropy':
-                    m=qi.DensityMatrix(scipy.linalg.logm(m)/np.log(2.0))
-                    trace=m.trace()
-                    m=m/trace
-                    current_fidelity=qi.state_fidelity(m,v,validate=False) # m has difficulty getting trace one
-                    sum+=current_fidelity
-                    #print(sum,current_fidelity)
-                elif self._reconstruction_loss=='fidelity':
+            if self._reconstruction_loss=='cross_entropy':
+                sum=0
+                for v,m in zip(vector,matrix):
+                    input_state_entropy=qi.entropy(v)
+                    log_state=qi.DensityMatrix(scipy.linalg.logm(m)/np.log(2.0))
+                    relative_entropy=-qi.DensityMatrix(np.dot(v,log_state)).trace()-input_state_entropy
+                    #current_fidelity=qi.state_fidelity(m,v,validate=False) # this is equal to the first term in relative entropy only if v is a pure state
+                    sum+=relative_entropy.real
+                return sum*1./len(vector)
+
+            elif self._reconstruction_loss=='fidelity':
+                sum=0
+                for v,m in zip(vector,matrix):
                     current_fidelity=qi.state_fidelity(m,v,validate=True)
                     sum+=current_fidelity
+                return -sum*1./len(vector)
 
-                else:
-                    raise ValueError('reconstruction loss type not recognized')
-            #print(sum)
-            return -sum*1./len(vector)
+            else:
+                raise ValueError('reconstruction loss type not recognized')
+
         
     def quantum_relative_entropy(self,latent):
         type_divergence=self._divergence_type
