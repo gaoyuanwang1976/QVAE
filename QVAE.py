@@ -41,7 +41,7 @@ if __name__=="__main__":
     parser.add_argument('--input_dim', required=False, type=int, help='customize the input data dimension, if zero the original input dimension is preserved', default=0)
     parser.add_argument('--reconstruction_loss', required=False, type=str, help='define the loss used in the reconstruction term of the objective', default='fidelity')
     parser.add_argument('--beta_weight', required=False, type=float, help='the beta parameter that controlls the relative weight of the quantum entropy term in the objective', default=1.0)
-    parser.add_argument('--divergence_type', required=False, type=str, help='choose between KL-Divergence and JS-Divergence', default='JSD')
+    parser.add_argument('--regularizer_type', required=False, type=str, help='choose between KL-Divergence and JS-Divergence', default='JSD')
     parser.add_argument('--num_auxiliary_encoder', required=False, type=int, help='number of auxiliary qubits in the encoder', default=0)
     parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
     parser.add_argument('--global_reconstruction_loss', action='store_true', help='whether global reconstruction loss is used')
@@ -67,16 +67,16 @@ if __name__=="__main__":
     trash_qubits=list(range(args.num_trash_qubits))
 
     reconstruction_loss=args.reconstruction_loss
-    if reconstruction_loss not in ['cross_entropy','fidelity','wasserstein']:
+    if reconstruction_loss not in ['cross_entropy','fidelity','wasserstein','JSD']:
         reconstruction_loss='fidelity'
         print('reconstruction loss choice not recognized, using fidelity loss')
 
     beta_weight=args.beta_weight
 
-    divergence_type=args.divergence_type
-    if divergence_type not in ['KLD','JSD']:
+    regularizer_type=args.regularizer_type
+    if regularizer_type not in ['KLD','JSD']:
         print('divergence type not recognized, use JSD instead')
-        divergence_type='JSD'
+        regularizer_type='JSD'
 
     num_auxiliary_encoder=args.num_auxiliary_encoder
     num_auxiliary_decoder=args.num_auxiliary_decoder
@@ -163,7 +163,7 @@ if __name__=="__main__":
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
-    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(maxiter=100),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,divergence_type=divergence_type,global_regularizer_flag=args.global_regularization)
+    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(maxiter=100),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,regularizer_type=regularizer_type,global_regularizer_flag=args.global_regularization)
 
     ### convert input into density matrices ###
     Xtrain_dm=[]

@@ -133,17 +133,17 @@ class QVAE_NN(SamplerQNN):
         return decoder_output,reduced_result
 
 class QVAE_trainer(NeuralNetworkRegressor):
-    def __init__(self,beta,divergence_type,global_regularizer_flag,reconstruction_loss='fidelity',**kwargs):
+    def __init__(self,beta,regularizer_type,global_regularizer_flag,reconstruction_loss='fidelity',**kwargs):
         super(QVAE_trainer, self).__init__(**kwargs)
         self._reconstruction_loss=reconstruction_loss
         self._beta=beta
-        self._divergence_type=divergence_type
+        self._regularizer_type=regularizer_type
         self._global_regularizer_flag=global_regularizer_flag
 
     def _fit_internal(self, X: np.ndarray, y: np.ndarray):
         function: ObjectiveFunction = None
         #function = StateVector_ObjectiveFunction(X, y, self._neural_network, self._loss)
-        function = DensityMatrix_ObjectiveFunction(X=X, y=y, neural_network=self._neural_network,loss=self._loss,reconstruction_loss=self._reconstruction_loss,beta=self._beta,divergence_type=self._divergence_type,global_regularizer_flag=self._global_regularizer_flag)
+        function = DensityMatrix_ObjectiveFunction(X=X, y=y, neural_network=self._neural_network,loss=self._loss,reconstruction_loss=self._reconstruction_loss,beta=self._beta,regularizer_type=self._regularizer_type,global_regularizer_flag=self._global_regularizer_flag)
         return self._minimize(function)
     
     def score_fidelity(self, X, y):
@@ -161,15 +161,7 @@ class QVAE_trainer(NeuralNetworkRegressor):
                 score =score+qi.state_fidelity(i,j,validate=True)
             return score/len(y)
         
-        elif loss_type=='cross_entropy':
-            score=0
-            for m,v in zip(y_pred,y):
-                input_state_entropy=qi.entropy(v)
-                log_state=qi.DensityMatrix(scipy.linalg.logm(m/np.log(2.0)))
-                relative_entropy=-qi.DensityMatrix(np.dot(v,log_state)).trace()-input_state_entropy
-                score+=relative_entropy.real
-            return -score/len(y)
-        elif loss_type=='wasserstein': #use fidelity for now
+        elif loss_type=='wasserstein': 
             num_data=len(X)
 
             dim=len(X[0])
@@ -192,6 +184,24 @@ class QVAE_trainer(NeuralNetworkRegressor):
                 pi_state=(pi_state+in_out_state.data*1./num_data)
             cost=np.trace(np.matmul(pi_state,C))
             return -cost.real
+        
+        elif loss_type=='cross_entropy':
+            score=0
+            for v,m in zip(y,y_pred):
+                input_state_entropy=qi.entropy(v)
+                log_state=qi.DensityMatrix(scipy.linalg.logm(m/np.log(2.0)))
+                relative_entropy=-qi.DensityMatrix(np.dot(v,log_state)).trace()-input_state_entropy
+                score+=relative_entropy.real
+            return -score/len(y)
+        
+        elif loss_type=='JSD':
+            score=0
+            for v,m in zip(y,y_pred):
+                M_state=0.5*(v.data+m.data)
+                log_M=qi.DensityMatrix(scipy.linalg.logm(M_state)/np.log(2.0)) # in base 2
+                relative_entropy=(-qi.DensityMatrix(np.dot(v,log_M)).trace()-qi.entropy(v)-qi.DensityMatrix(np.dot(m,log_M)).trace()-qi.entropy(m))*0.5 ##check if correct!
+                score+=relative_entropy.real
+            return -score*1./len(y)
         else:
             raise ValueError('reconstruction loss type not recognized')
 
@@ -219,11 +229,11 @@ class StateVector_ObjectiveFunction(ObjectiveFunction):
         return grad
     
 class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
-    def __init__(self,reconstruction_loss,beta,divergence_type,global_regularizer_flag,**kwargs):
+    def __init__(self,reconstruction_loss,beta,regularizer_type,global_regularizer_flag,**kwargs):
         super(DensityMatrix_ObjectiveFunction, self).__init__(**kwargs)
         self._reconstruction_loss=reconstruction_loss
         self._beta=beta
-        self._divergence_type=divergence_type
+        self._regularizer_type=regularizer_type
         self._global_regularizer_flag=global_regularizer_flag
 
     def reconstruction_loss(self,matrix,vector):
@@ -268,31 +278,38 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     current_fidelity=qi.state_fidelity(m,v,validate=True)
                     sum+=current_fidelity
                 return -sum*1./len(vector)
+            
+            elif self._reconstruction_loss=='JSD':
+                sum=0
+                for v,m in zip(vector,matrix):
+                    M_state=0.5*(v.data+m.data)
+                    log_M=scipy.linalg.logm(M_state)/np.log(2.0) # in base 2
+                    relative_entropy=(-qi.DensityMatrix(np.dot(v,log_M)).trace()-qi.entropy(v)-qi.DensityMatrix(np.dot(m,log_M)).trace()-qi.entropy(m))*0.5 ##check if correct!
+                    sum+=relative_entropy.real
+                return sum*1./len(vector)
 
             else:
                 raise ValueError('reconstruction loss type not recognized')
 
         
     def quantum_relative_entropy(self,latent):
-        type_divergence=self._divergence_type
-        entropy_loss=0
+        type_regularizer=self._regularizer_type
+        dim=latent[0].dim
+        max_mixed_state=np.diag(np.full(dim,1/dim))
         ## analogy KL divergence
-        if type_divergence=='KLD':
+        if type_regularizer=='KLD':
             if self._global_regularizer_flag==True:
                 combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
                 for state in latent:
                     combined_state=combined_state+state.data*1./len(latent)
-                dim=latent[0].dim
-                max_mixed_state=np.diag(np.full(dim,1/dim))
                 max_entropy=qi.entropy(max_mixed_state) ## this is log base 2 by default
                 log_state=scipy.linalg.logm(combined_state)/np.log(2.0) # in base 2
                 relative_entropy=-qi.DensityMatrix(np.dot(max_mixed_state,log_state)).trace()-max_entropy #KL(a||b), a is actual, b is predict. relative_entropy>=0
                 entropy_loss=relative_entropy.real
                 return entropy_loss
             else:
+                entropy_loss=0
                 for state in latent:
-                    dim=latent[0].dim
-                    max_mixed_state=np.diag(np.full(dim,1/dim))
                     max_entropy=qi.entropy(max_mixed_state) ## this is log base 2 by default
                     log_state=scipy.linalg.logm(state)/np.log(2.0) # in base 2
                     relative_entropy=-qi.DensityMatrix(np.dot(max_mixed_state,log_state)).trace()-max_entropy #KL(a||b), a is actual, b is predict
@@ -300,13 +317,12 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                 return entropy_loss*1./len(latent)
 
         ## analogy Jensen-Shannon divergence
-        elif type_divergence=='JSD':
+        elif type_regularizer=='JSD':
             if self._global_regularizer_flag==True:
                 combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
                 for state in latent:
                     combined_state=combined_state+state.data*1./len(latent)
-                dim=latent[0].dim
-                max_mixed_state=np.diag(np.full(dim,1/dim))
+
                 M_state=0.5*(state+max_mixed_state)
                 log_M=scipy.linalg.logm(M_state)/np.log(2.0) # in base 2
                 my_entropy=qi.entropy(state) 
@@ -316,10 +332,9 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                 entropy_loss=relative_entropy.real
                 return entropy_loss
 
-            else:        
+            else: 
+                entropy_loss=0       
                 for state in latent:
-                    dim=latent[0].dim
-                    max_mixed_state=np.diag(np.full(dim,1/dim))
                     M_state=0.5*(state+max_mixed_state)
                     log_M=scipy.linalg.logm(M_state)/np.log(2.0) # in base 2
                     my_entropy=qi.entropy(state) 
@@ -328,8 +343,22 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     relative_entropy=(-qi.DensityMatrix(np.dot(state,log_M)).trace()-my_entropy-qi.DensityMatrix(np.dot(max_mixed_state,log_M)).trace()-max_entryopy)*0.5 ##check if correct!
                     entropy_loss=entropy_loss+relative_entropy.real
                 return entropy_loss*1./len(latent)
-            
-        elif type_divergence=='wasserstein': #this definition of \pi is bad for two mixed states. Do not use
+
+        elif type_regularizer=='fidelity':
+            if self._global_regularizer_flag==True:
+                combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
+                for state in latent:
+                    combined_state=combined_state+state.data*1./len(latent)
+                entropy_loss=qi.state_fidelity(combined_state,max_mixed_state,validate=True)
+                return -entropy_loss
+
+            else:
+                entropy_loss=0
+                for state in latent:
+                    entropy_loss=entropy_loss+qi.state_fidelity(state,max_mixed_state,validate=True)
+                return -entropy_loss*1./len(latent)
+        
+        elif type_regularizer=='wasserstein': #this definition of \pi is bad for two mixed states. Do not use
             dim=latent[0].dim
             max_mixed_state=np.diag(np.full(dim,1/dim))
 
