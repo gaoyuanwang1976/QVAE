@@ -30,8 +30,8 @@ if __name__=="__main__":
     parser.add_argument('-p','--patience', required=False, type=int, help='upper limit for the patience counter used in validation', default=5)
     parser.add_argument('--num_layers', required = False, type=int, help='determines the number of alternating layers in the circuit', default=1)
     parser.add_argument('-i', '--import_data', required=False, help='path to the input file', default='dataset/data_all_cont4')
-    parser.add_argument('--partition_size', required=False, help='sets partition size for splitting data into train, test, and validation sets (scales the partition_ratio arg)', default='max')
-    parser.add_argument('--partition_ratio', required=False, type=str, help="governs the ration of partition sizes in the training, validation, and test sets. a list of the form [train, val, test]", default="0.4:0.3:0.3")
+    parser.add_argument('--partition_size', required=False, help='sets partition size for splitting data into train and test sets (scales the partition_ratio arg)', default='max')
+    parser.add_argument('--partition_ratio', required=False, type=str, help="governs the ration of partition sizes in the training and test sets. a list of the form [train, test]", default="0.7:0.3")
     parser.add_argument('-o','--optimizer', required=False, type=str, help='determines the Qiskit optimizer used in qnn', default='cobyla')
     parser.add_argument('-x','--shots', required=False, type=int, help="the number of shots per circuit simulation", default=100)
     parser.add_argument('--shuffle', required=False, type=bool, help='determines whether to shuffle data before alternating', default=False)
@@ -109,25 +109,23 @@ if __name__=="__main__":
     else:
         partition_split=len(dataset)
     print(f'using partition size of {partition_split}')
-    train_set, val_set, test_set = preprocessing.train_val_test(dataset, partition_split, ratio)
+    train_set, test_set = preprocessing.train_test(dataset, partition_split, ratio)
     train_len = len(train_set)
+    print("for training:")
     preprocessing.get_info_g(train_set, True)
     print("for testing:")
     preprocessing.get_info_g(test_set, True)
     test_len = len(test_set)
 
     Xtrain, ytrain = preprocessing.convert_for_qiskit(train_set)
-    Xval, yval = preprocessing.convert_for_qiskit(val_set)
     Xtest, ytest = preprocessing.convert_for_qiskit(test_set)
     if args.input_dim==0:
         n_dim=len(Xtrain[0])
     else:
         n_dim=args.input_dim
     Xtrain=((Xtrain-minData)/(maxData-minData)*np.pi).T[:n_dim].T
-    Xval=((Xval-minData)/(maxData-minData)*np.pi).T[:n_dim].T
     Xtest=((Xtest-minData)/(maxData-minData)*np.pi).T[:n_dim].T
     Xtrain=preprocessing.normalize_amplitude(Xtrain)
-    Xval=preprocessing.normalize_amplitude(Xval)
     Xtest=preprocessing.normalize_amplitude(Xtest)     
 
 #######################
@@ -168,20 +166,15 @@ if __name__=="__main__":
     ### convert input into density matrices ###
     Xtrain_dm=[]
     Xtest_dm=[]
-    Xval_dm=[]
     if args.global_reconstruction_loss == True:
         combined_state_tr=np.zeros((len(Xtrain[0]),len(Xtrain[0])))
         combined_state_te=np.zeros((len(Xtest[0]),len(Xtest[0])))
-        combined_state_va=np.zeros((len(Xval[0]),len(Xval[0])))
 
     for x in Xtrain:
         Xtrain_dm.append(qi.DensityMatrix(x).data)
         if args.global_reconstruction_loss == True:
             combined_state_tr=combined_state_tr+Xtrain_dm[-1]*1./len(Xtrain)
-    for x in Xval:
-        Xval_dm.append(qi.DensityMatrix(x).data)
-        if args.global_reconstruction_loss == True:
-            combined_state_va=combined_state_va+Xval_dm[-1]*1./len(Xval)
+
     for x in Xtest:
         Xtest_dm.append(qi.DensityMatrix(x).data)
         if args.global_reconstruction_loss == True:
@@ -190,32 +183,29 @@ if __name__=="__main__":
     if args.global_reconstruction_loss == True:
         Xtrain=np.array([combined_state_tr])
         Xtest=np.array([combined_state_te])
-        Xval=np.array([combined_state_va])
 
     else:
         Xtrain=np.array(Xtrain_dm)
         Xtest=np.array(Xtest_dm)
-        Xval=np.array(Xval_dm)
 
-
-    best_val_score=-sys.maxsize
+    best_train_score=-sys.maxsize
 
     for epoch in range(num_epoch):
         print('start fitting')
         model.fit(Xtrain, Xtrain)
 
         this_train_score=model.score(Xtrain, Xtrain,reconstruction_loss)
-        this_val_score=model.score(Xval, Xval,reconstruction_loss)
-        this_train_fidelity=model.score(Xtrain, Xtrain,'fidelity')
-        this_val_fidelity=model.score(Xval, Xval,'fidelity')
-        print(epoch,this_train_fidelity,this_val_fidelity,this_val_score)
 
-        if this_val_score > best_val_score: #validation wrapper
-            best_val_epoch = epoch
-            best_val_score=this_val_score
+        this_train_fidelity=model.score(Xtrain, Xtrain,'fidelity')
+
+        print(epoch,'train fidelity:',this_train_fidelity,'train score:',this_train_score)
+
+        if this_train_score > best_train_score: #validation wrapper
+            best_train_epoch = epoch
+            best_train_score=this_train_score
             best_model= copy.deepcopy(model)
             patience_counter = 0
-            print(f"new best validation score {best_val_score}")
+            print(f"new best train score {best_train_score}")
         else:
             patience_counter+=1
         if patience_counter == args.patience:
@@ -224,7 +214,6 @@ if __name__=="__main__":
 
     trainscore = best_model.score(Xtrain, Xtrain,'fidelity')
     testscore = best_model.score(Xtest, Xtest,'fidelity')
-    valscore = best_model.score(Xval, Xval,'fidelity')
     print(f'best model train score: {trainscore}')
     print(f'best model test score: {testscore}')
-    print(f'best model val score: {valscore}')
+

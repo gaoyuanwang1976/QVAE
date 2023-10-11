@@ -143,6 +143,7 @@ class QVAE_trainer(NeuralNetworkRegressor):
     def _fit_internal(self, X: np.ndarray, y: np.ndarray):
         function: ObjectiveFunction = None
         #function = StateVector_ObjectiveFunction(X, y, self._neural_network, self._loss)
+
         function = DensityMatrix_ObjectiveFunction(X=X, y=y, neural_network=self._neural_network,loss=self._loss,reconstruction_loss=self._reconstruction_loss,beta=self._beta,regularizer_type=self._regularizer_type,global_regularizer_flag=self._global_regularizer_flag)
         return self._minimize(function)
     

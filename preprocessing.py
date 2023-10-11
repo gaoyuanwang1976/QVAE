@@ -147,15 +147,13 @@ def import_dataset(filename, shuffle=False, shuffleseed=False):
             np.random.shuffle(array)
     return array_to_dataset(array)
 
-def train_val_test(dataset, scale, ratio):
+def train_test(dataset, scale, ratio):
     
     part1 = int(scale*ratio[0])
     part2 = part1 + int(scale*ratio[1])
-    part3 = part2 + int(scale*ratio[2])
     train = dataset[:part1]
-    val = dataset[part1:part2]
-    test = dataset[part2:part3]
-    return (train, val, test)
+    test = dataset[part1:part2]
+    return (train, test)
 
 def get_info_g(dataset, verbose=False):
     """Determines the number of inputs labeled one and zero in a dataset."""
