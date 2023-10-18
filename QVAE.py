@@ -47,6 +47,10 @@ if __name__=="__main__":
     parser.add_argument('--global_reconstruction_loss', action='store_true', help='whether global reconstruction loss is used')
     parser.add_argument('--global_regularization', action='store_true', help='whether global regularization is used')
 
+    parser.add_argument('--output_dir',required=False, help='output directory for reconstructed state and latent state',default=None)
+
+
+
     args = parser.parse_args()
 
     import_name = args.import_data
@@ -216,4 +220,25 @@ if __name__=="__main__":
     testscore = best_model.score(Xtest, Xtest,'fidelity')
     print(f'best model train score: {trainscore}')
     print(f'best model test score: {testscore}')
+
+    if args.output_dir!=None:
+        output_test_tmp,latent_test_tmp=best_model.predict(Xtest)
+
+        output_train_tmp,latent_train_tmp=best_model.predict(Xtrain)
+        output_train=[]
+        latent_train=[]
+        output_test=[]
+        latent_test=[]
+        for train_o,train_l in zip(output_train_tmp,latent_train_tmp):
+            output_train.append(train_o.data.flatten())
+            latent_train.append(train_l.data.flatten())
+        for test_o,test_l in zip(output_test_tmp,latent_test_tmp):
+            output_test.append(test_o.data.flatten())
+            latent_test.append(test_l.data.flatten())
+        os.mkdir('./'+args.output_dir)
+        np.savetxt(args.output_dir+'/reconstruct_train.dat', output_train)
+        np.savetxt(args.output_dir+'/latent_train.dat', latent_train)
+        np.savetxt(args.output_dir+'/reconstruct_test.dat', output_test)
+        np.savetxt(args.output_dir+'/latent_test.dat', latent_test)
+
 
