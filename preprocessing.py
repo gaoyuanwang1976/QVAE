@@ -4,7 +4,7 @@
 import torch
 from torch.autograd import Function
 import torch.nn as nn
-
+import qiskit.quantum_info as qi
 from qiskit import QuantumCircuit, Aer, execute
 from qiskit.circuit import Parameter
 from qiskit.extensions import UnitaryGate
@@ -613,3 +613,10 @@ def get_readout(x):
     the readout qubit will be the first number of the output string.
     """
     return(int(str(x)[0]))
+
+
+def vector_to_DensityMatrix(X):
+    X_dm=[]
+    for x in X:
+        X_dm.append(qi.DensityMatrix(x))
+    return X_dm
