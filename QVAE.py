@@ -100,7 +100,7 @@ if __name__=="__main__":
         print("problem with parsing optimizer, defaulting to COBYLA")
         optimizer = COBYLA
 
-    dataset = preprocessing.import_dataset(import_name,shuffle, shuffleseed)
+    dataset = preprocessing.import_dataset(import_name,'classical',shuffle, shuffleseed)
     maxData = preprocessing.get_max_data(import_name)
     minData = preprocessing.get_min_data(import_name)
 
@@ -121,8 +121,8 @@ if __name__=="__main__":
     preprocessing.get_info_g(test_set, True)
     test_len = len(test_set)
 
-    Xtrain, ytrain = preprocessing.convert_for_qiskit(train_set)
-    Xtest, ytest = preprocessing.convert_for_qiskit(test_set)
+    Xtrain, ytrain = preprocessing.convert_for_qiskit_classical(train_set)
+    Xtest, ytest = preprocessing.convert_for_qiskit_classical(test_set)
     if args.input_dim==0:
         n_dim=len(Xtrain[0])
     else:
@@ -229,12 +229,13 @@ if __name__=="__main__":
         latent_train=[]
         output_test=[]
         latent_test=[]
-        for train_o,train_l in zip(output_train_tmp,latent_train_tmp):
-            output_train.append(train_o.data.flatten())
-            latent_train.append(train_l.data.flatten())
-        for test_o,test_l in zip(output_test_tmp,latent_test_tmp):
-            output_test.append(test_o.data.flatten())
-            latent_test.append(test_l.data.flatten())
+        for train_o,train_l,y in zip(output_train_tmp,latent_train_tmp,ytrain):
+            output_train.append(np.append(train_o.data.flatten(),y))
+            latent_train.append(np.append(train_l.data.flatten(),y))
+
+        for test_o,test_l,y in zip(output_test_tmp,latent_test_tmp,ytest):
+            output_test.append(np.append(test_o.data.flatten(),y))
+            latent_test.append(np.append(test_l.data.flatten(),y))
         os.mkdir('./'+args.output_dir)
         np.savetxt(args.output_dir+'/reconstruct_train.dat', output_train)
         np.savetxt(args.output_dir+'/latent_train.dat', latent_train)

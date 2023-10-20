@@ -59,8 +59,7 @@ if __name__=="__main__":
     ratio = args.partition_ratio.split(":")
     ratio = [float(entry) for entry in ratio]
 
-    dataset = preprocessing.import_dataset(import_name,shuffle, shuffleseed)
- 
+    dataset = preprocessing.import_dataset(import_name,args.input_type,shuffle, shuffleseed)
 
     if alternate:
         dataset = preprocessing.alternate_g(dataset)
@@ -77,15 +76,22 @@ if __name__=="__main__":
     print("for testing:")
     preprocessing.get_info_g(test_set, True)
 
-    Xtrain, ytrain = preprocessing.convert_for_qiskit(train_set)
-    Xtest, ytest = preprocessing.convert_for_qiskit(test_set)
+
     if args.input_type=='classical':
+        Xtrain, ytrain = preprocessing.convert_for_qiskit_classical(train_set)
+        Xtest, ytest = preprocessing.convert_for_qiskit_classical(test_set)
         maxData = preprocessing.get_max_data(import_name)
         minData = preprocessing.get_min_data(import_name)
         Xtrain=((Xtrain-minData)/(maxData-minData)*np.pi)
         Xtest=((Xtest-minData)/(maxData-minData)*np.pi)
         Xtrain=preprocessing.normalize_amplitude(Xtrain)
         Xtest=preprocessing.normalize_amplitude(Xtest)
+        Xtrain=preprocessing.vector_to_DensityMatrix(Xtrain)
+        Xtest=preprocessing.vector_to_DensityMatrix(Xtest)
+
+    elif args.input_type=='quantum':
+        Xtrain, ytrain = preprocessing.convert_for_qiskit_dm(train_set)
+        Xtest, ytest = preprocessing.convert_for_qiskit_dm(test_set)
         Xtrain=preprocessing.vector_to_DensityMatrix(Xtrain)
         Xtest=preprocessing.vector_to_DensityMatrix(Xtest)
 

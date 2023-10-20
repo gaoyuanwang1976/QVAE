@@ -115,13 +115,24 @@ def get_uq_g(dataset):
 
 #%% Function definitions specific to the genomics dataset
 
-def array_to_dataset(array):
+def array_to_dataset(array,input_type):
     """Converts data arrays into appropriate form for use in QNN. Assumes each entry in array is a seperate datapoint w the last column corresponding to label."""
     dataset = []
-    for entry in array:
-        input = torch.tensor(entry[:len(entry)-1])
-        label = entry[len(entry)-1]
-        dataset.append((input,label))
+    if input_type=='classical':
+        for entry in array:
+            input = torch.tensor(entry[:len(entry)-1])
+            label = int(entry[len(entry)-1])
+            dataset.append((input,label))
+
+    elif input_type=='quantum':
+        dim=int(np.sqrt(len(array[0])-1))
+        for entry in array:
+            input=np.zeros((dim,dim),dtype=complex)
+            for row in range(dim):
+                for col in range(dim):
+                    input[row][col]=entry[row*dim+col]
+            label = int(entry[len(entry)-1].real) #.real to avoid warning
+            dataset.append((input,label))
     return dataset
 
 def get_max_data(filename):
@@ -132,20 +143,37 @@ def get_min_data(filename):
     X = (np.loadtxt(filename).T[:-1]).T
     return (min(X.flatten())).round(1)
 
-def import_dataset(filename, shuffle=False, shuffleseed=False):
+def import_dataset(filename,input_type, shuffle=False, shuffleseed=False):
     """
     Imports appropriately-formatted text matrix, converting to array then to dataset.
     Includes options to shuffle randomly or according to a given seed.
     """
-    array = np.loadtxt(filename)
-    
+
+    if input_type=='classical':
+        array = np.loadtxt(filename)
+    elif input_type=='quantum':
+        f = open(filename, "r").read().splitlines()
+
+        #dim=int(np.sqrt(len(f[0].split())-1))
+        array=[]
+        for d in f:
+            array_tmp=np.zeros((len(d.split())),dtype=complex)
+            for index_i,i in enumerate(d.split()):
+                array_tmp[index_i]=complex(i)
+            #array_tmp[-1]=int(d.split()[-1])
+            #array_tmp=np.zeros((dim,dim),dtype=complex)
+            #for row in range(dim):
+            #    for col in range(dim):
+            #        array_tmp[row][col]=complex(d.split()[row*dim+col])
+            array.append(array_tmp)
+
     if shuffle:
         if shuffleseed==False:
             np.random.shuffle(array)
         else:
             np.random.seed(shuffleseed)
             np.random.shuffle(array)
-    return array_to_dataset(array)
+    return array_to_dataset(array,input_type)
 
 def train_test(dataset, scale, ratio):
     
@@ -269,19 +297,23 @@ def round_yscore(yscore):
 
 # %% defs for qisQNN
 
+def convert_for_qiskit_dm(dataset):
+    X = []
+    y = []
+    for input, label in dataset:
+        #input = input.numpy()
+        #input = input.round(1)
+        X.append(input)
+        y.append(label)
 
+    return(X,y)
 
-def convert_for_qiskit(dataset, datatype="cont"):
+def convert_for_qiskit_classical(dataset):
     X = []
     y = []
     for input, label in dataset:
         input = input.numpy()
-        if datatype == 'cont':
-            input = input.round(1)
-        elif datatype == 'bin':
-            input = input.round(0)
-        else:
-            return(print('set datatype to cont or bin'))
+        input = input.round(1)
         X.append(input)
         y.append(label)
     X = np.array(X)

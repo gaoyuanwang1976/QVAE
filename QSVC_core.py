@@ -22,7 +22,9 @@ def calc_fidelity_kernel_matrix(X1_dm,X2_dm):
     kernel_matrix=np.zeros((len(X1_dm),len(X2_dm)))
     for row in range(len(X1_dm)):
         for col in range(len(X2_dm)):
-            kernel_matrix[row][col]=qi.state_fidelity(X1_dm[row],X2_dm[col],validate=True)
+            if abs(1-X1_dm[row].trace()) > 0.01 or abs(1-X2_dm[col].trace())>0.01:
+                print('invalid state found with trace',X1_dm[row].trace(),X2_dm[col].trace())
+            kernel_matrix[row][col]=qi.state_fidelity(X1_dm[row],X2_dm[col],validate=False)
     return np.array(kernel_matrix)
 
 
