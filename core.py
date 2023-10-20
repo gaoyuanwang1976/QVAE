@@ -85,6 +85,7 @@ class QVAE_NN(SamplerQNN):
             my_state=my_state.evolve(my_encoder)
             result_tmp.append(my_state)
 
+
         result=[]
         for state in result_tmp:
             auxiliary_qubits_e=range(n_qubit,n_qubit+self._num_auxiliary_encoder)

@@ -8,7 +8,7 @@ from qiskit.providers.aer import AerSimulator
 from qiskit_machine_learning.kernels import QuantumKernel
 from qiskit_machine_learning.kernels.algorithms import QuantumKernelTrainer
 
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score,roc_auc_score
 import preprocessing
 import QSVC_core
 
@@ -139,9 +139,24 @@ if __name__=="__main__":
 
     kernel_train=QSVC_core.calc_fidelity_kernel_matrix(mapped_train,mapped_train)
     kernel_test=QSVC_core.calc_fidelity_kernel_matrix(mapped_test,mapped_train)
-    svc=SVC(kernel='precomputed')
+    svc=SVC(kernel='precomputed',probability=True)
     svc.fit(kernel_train,ytrain)
 
-    ypred=svc.predict(kernel_test)
-    score=accuracy_score(ypred,ytest)
-    print(score)
+    #ypred=svc.predict(kernel_test)
+    #y_train_pred=svc.predict(kernel_train)
+
+    ypred_prob=svc.predict_proba(kernel_test)
+    ypred=np.argmax(ypred_prob, axis=1)
+
+    ytrain_pred_prob=svc.predict_proba(kernel_train)
+    ytrain_pred=np.argmax(ytrain_pred_prob, axis=1)
+
+    test_score=accuracy_score(ypred,ytest)
+    train_score=accuracy_score(ytrain_pred,ytrain)
+    auc_score=roc_auc_score(ytest, ypred_prob[:,1])
+
+    print('train accuracy score',train_score)
+    print('test accuracy score',test_score)
+    print('test AUC score',auc_score)
+
+
