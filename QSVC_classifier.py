@@ -11,7 +11,7 @@ from qiskit_machine_learning.kernels.algorithms import QuantumKernelTrainer
 from sklearn.metrics import accuracy_score,roc_auc_score
 import preprocessing
 import QSVC_core
-
+import qiskit_machine_learning.utils as qi
 import math
 import os
 abspath = os.path.abspath('__file__')
@@ -76,7 +76,6 @@ if __name__=="__main__":
     print("for testing:")
     preprocessing.get_info_g(test_set, True)
 
-
     if args.input_type=='classical':
         Xtrain, ytrain = preprocessing.convert_for_qiskit_classical(train_set)
         Xtest, ytest = preprocessing.convert_for_qiskit_classical(test_set)
@@ -98,9 +97,9 @@ if __name__=="__main__":
 #######################
 ### feature mapping ###
 #######################
-
+    #n_inputs=int(math.log2(len(Xtrain[0])))
     n_inputs = int(math.log2(len(Xtrain[0].data[0])))#+n_extra_qubits
-    #n_external_inputs=len(Xtrain[0].data[0])
+
 
     qc = QuantumCircuit(n_inputs)
     tmp_n_params=math.comb(n_inputs,2)     #number of gates for ising_interaction (zz) embedding, this number may change for another embedding
@@ -124,14 +123,15 @@ if __name__=="__main__":
     backend=AerSimulator(method='statevector')
     quant_kernel = QuantumKernel(feature_map=qc,training_parameters=theta,quantum_instance=backend)
     loss_fun=QSVC_core.QSVC_Loss(C=1.0)
+    #loss_fun=qi.loss_functions.SVCLoss()
     #cb_qkt = embedding.QKTCallback()
-    opt = SPSA(maxiter=100)#, callback=cb_qkt.callback)
+    opt = COBYLA(maxiter=10)#, callback=cb_qkt.callback)
     qk_trainer = QuantumKernelTrainer(quantum_kernel=quant_kernel,optimizer=opt, loss=loss_fun)
 
 
     qkt_results = qk_trainer.fit(Xtrain, ytrain)
     optimized_kernel = qkt_results.quantum_kernel
-
+    #optimized_kernel.evaluate(Xtrain)
     mapped_train=[]
     for i in Xtrain:
         mapped_train.append(i.evolve(optimized_kernel.feature_map))
@@ -157,9 +157,15 @@ if __name__=="__main__":
     ytrain_pred_prob=svc.predict_proba(kernel_train)
     ytrain_pred=np.argmax(ytrain_pred_prob, axis=1)
 
+
     test_score=accuracy_score(ypred,ytest)
     train_score=accuracy_score(ytrain_pred,ytrain)
     auc_score=roc_auc_score(ytest, ypred_prob[:,1])
+
+
+    print(ytrain_pred)
+    print(ypred_prob)
+    print(ypred)
 
     print('train accuracy score',train_score)
     print('test accuracy score',test_score)
