@@ -125,7 +125,7 @@ if __name__=="__main__":
     loss_fun=QSVC_core.QSVC_Loss(C=1.0)
     #loss_fun=qi.loss_functions.SVCLoss()
     #cb_qkt = embedding.QKTCallback()
-    opt = COBYLA(maxiter=10)#, callback=cb_qkt.callback)
+    opt = COBYLA(maxiter=100)#, callback=cb_qkt.callback)
     qk_trainer = QuantumKernelTrainer(quantum_kernel=quant_kernel,optimizer=opt, loss=loss_fun)
 
 
