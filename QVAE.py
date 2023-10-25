@@ -1,3 +1,5 @@
+from pyexpat.errors import XML_ERROR_RESERVED_PREFIX_XML
+from re import A
 import numpy as np
 from qiskit.circuit import ParameterVector
 from qiskit.algorithms.optimizers import COBYLA, SPSA, ADAM
@@ -44,8 +46,7 @@ if __name__=="__main__":
     parser.add_argument('--regularizer_type', required=False, type=str, help='choose between KL-Divergence and JS-Divergence', default='JSD')
     parser.add_argument('--num_auxiliary_encoder', required=False, type=int, help='number of auxiliary qubits in the encoder', default=0)
     parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
-    parser.add_argument('--global_reconstruction_loss', action='store_true', help='whether global reconstruction loss is used')
-    parser.add_argument('--global_regularization', action='store_true', help='whether global regularization is used')
+    parser.add_argument('--global_state', action='store_true', help='whether a global quantum state is used')
 
     parser.add_argument('--output_dir',required=False, help='output directory for reconstructed state and latent state',default=None)
 
@@ -85,9 +86,6 @@ if __name__=="__main__":
     num_auxiliary_encoder=args.num_auxiliary_encoder
     num_auxiliary_decoder=args.num_auxiliary_decoder
 
-    if args.global_reconstruction_loss==True:
-        args.global_regularization=True
-        print('Global regularization must be TRUE if global reconstruction loss is used.')
     ##########
 
     if args.optimizer.lower() == 'cobyla':
@@ -165,28 +163,45 @@ if __name__=="__main__":
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
-    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(maxiter=100),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,regularizer_type=regularizer_type,global_regularizer_flag=args.global_regularization)
+    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(maxiter=100),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,regularizer_type=regularizer_type)
 
     ### convert input into density matrices ###
     Xtrain_dm=[]
     Xtest_dm=[]
-    if args.global_reconstruction_loss == True:
+
+    if args.global_state == True:
         combined_state_tr=np.zeros((len(Xtrain[0]),len(Xtrain[0])))
         combined_state_te=np.zeros((len(Xtest[0]),len(Xtest[0])))
 
     for x in Xtrain:
         Xtrain_dm.append(qi.DensityMatrix(x).data)
-        if args.global_reconstruction_loss == True:
+        if args.global_state == True:
             combined_state_tr=combined_state_tr+Xtrain_dm[-1]*1./len(Xtrain)
 
     for x in Xtest:
         Xtest_dm.append(qi.DensityMatrix(x).data)
-        if args.global_reconstruction_loss == True:
+        if args.global_state == True:
             combined_state_te=combined_state_te+Xtest_dm[-1]*1./len(Xtest)
 
-    if args.global_reconstruction_loss == True:
-        Xtrain=np.array([combined_state_tr])
-        Xtest=np.array([combined_state_te])
+    if args.global_state == True:
+        if reconstruction_loss=='wasserstein':
+            Xtrain_pool=[]
+            Xtest_pool=[]
+            tr_eigenvalues, tr_eigenvectors = np.linalg.eig(combined_state_tr)
+            for tr_i,tr_eigenvalue in enumerate(tr_eigenvalues):
+                count=int(round(tr_eigenvalue.real,3)*1000)
+                for i in range(count):
+                    Xtrain_pool.append(qi.DensityMatrix(tr_eigenvectors[tr_i]).data)
+
+            te_eigenvalues, te_eigenvectors = np.linalg.eig(combined_state_te)
+            for te_i,te_eigenvalue in enumerate(te_eigenvalues):
+                count=int(round(te_eigenvalue.real,3)*1000)
+                for i in range(count):
+                    Xtest_pool.append(qi.DensityMatrix(te_eigenvectors[te_i]).data)
+
+        else:
+            Xtrain=np.array([combined_state_tr])
+            Xtest=np.array([combined_state_te])
 
     else:
         Xtrain=np.array(Xtrain_dm)
