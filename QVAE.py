@@ -191,16 +191,17 @@ if __name__=="__main__":
             Xtest_pool=[]
             tr_eigenvalues, tr_eigenvectors = np.linalg.eig(combined_state_tr)
             for tr_i,tr_eigenvalue in enumerate(tr_eigenvalues):
-                count=int(round(tr_eigenvalue.real,3)*1000)
+                count=int(round(tr_eigenvalue.real,2)*100)
                 for i in range(count):
                     Xtrain_pool.append(qi.DensityMatrix(tr_eigenvectors[tr_i]).data)
 
             te_eigenvalues, te_eigenvectors = np.linalg.eig(combined_state_te)
             for te_i,te_eigenvalue in enumerate(te_eigenvalues):
-                count=int(round(te_eigenvalue.real,3)*1000)
+                count=int(round(te_eigenvalue.real,2)*100)
                 for i in range(count):
                     Xtest_pool.append(qi.DensityMatrix(te_eigenvectors[te_i]).data)
-
+            Xtrain=np.array(Xtrain_pool)
+            Xtest=np.array(Xtest_pool)
         else:
             Xtrain=np.array([combined_state_tr])
             Xtest=np.array([combined_state_te])
