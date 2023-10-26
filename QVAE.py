@@ -184,6 +184,8 @@ if __name__=="__main__":
             combined_state_te=combined_state_te+Xtest_dm[-1]*1./len(Xtest)
 
     if args.global_state == True:
+        Xtrain_origin=copy.deepcopy(Xtrain_dm)
+        Xtest_origin=copy.deepcopy(Xtest_dm)
         if reconstruction_loss=='wasserstein':
             Xtrain_pool=[]
             Xtest_pool=[]
@@ -237,9 +239,13 @@ if __name__=="__main__":
     print(f'best model test score: {testscore}')
 
     if args.output_dir!=None:
-        output_test_tmp,latent_test_tmp=best_model.predict(Xtest)
+        if args.global_state==True:
+            output_test_tmp,latent_test_tmp=best_model.predict(Xtest_origin)
+            output_train_tmp,latent_train_tmp=best_model.predict(Xtrain_origin)
 
-        output_train_tmp,latent_train_tmp=best_model.predict(Xtrain)
+        else:     
+            output_test_tmp,latent_test_tmp=best_model.predict(Xtest)
+            output_train_tmp,latent_train_tmp=best_model.predict(Xtrain)
         output_train=[]
         latent_train=[]
         output_test=[]
