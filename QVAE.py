@@ -47,6 +47,7 @@ if __name__=="__main__":
     parser.add_argument('--num_auxiliary_encoder', required=False, type=int, help='number of auxiliary qubits in the encoder', default=0)
     parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
     parser.add_argument('--global_state', action='store_true', help='whether a global quantum state is used')
+    parser.add_argument('--initial_point', required=False, help='initial parameter of the neural network', default=None)
 
     parser.add_argument('--output_dir',required=False, help='output directory for reconstructed state and latent state',default=None)
 
@@ -163,7 +164,11 @@ if __name__=="__main__":
 
     #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
     #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
-    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(maxiter=100),loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,regularizer_type=regularizer_type)
+    if args.initial_point!=None:
+        initial_point=[int(args.initial_point)]*qnn.num_weights
+    else:
+        initial_point=args.initial_point
+    model=core.QVAE_trainer(neural_network=qnn,optimizer=optimizer(maxiter=100),initial_point=initial_point,loss= 'squared_error',warm_start=True,reconstruction_loss=reconstruction_loss,beta=beta_weight,regularizer_type=regularizer_type)
 
     ### convert input into density matrices ###
     Xtrain_dm=[]
