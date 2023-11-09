@@ -414,12 +414,18 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         raise NotImplementedError
 
 
-def encoder(n_layers,n_qubit,theta_params,num_auxiliary_encoder):
+def encoder(n_layers,n_qubit,theta_params,num_auxiliary_encoder,input_task):
     qc=QuantumCircuit(n_qubit+num_auxiliary_encoder)
-    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_encoder) 
+    if input_task=='gene':
+        embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_encoder)
+    elif input_task=='mnist':
+        embedding.mnist_circuit(qc,theta_params,n_layers,n_qubit)
     return qc
 
-def decoder(n_layers,n_qubit,theta_params,num_auxiliary_decoder):
+def decoder(n_layers,n_qubit,theta_params,num_auxiliary_decoder,input_task):
     qc=QuantumCircuit(n_qubit+num_auxiliary_decoder)
-    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_decoder) 
+    if input_task=='gene':
+        embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_decoder)
+    elif input_task=='mnist':
+        embedding.mnist_circuit(qc,theta_params,n_layers,n_qubit).inverse()
     return qc

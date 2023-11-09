@@ -48,6 +48,7 @@ if __name__=="__main__":
     parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
     parser.add_argument('--global_state', action='store_true', help='whether a global quantum state is used')
     parser.add_argument('--initial_point', required=False, help='initial parameter of the neural network', default=None)
+    parser.add_argument('--input_task',required=False, help='specify whether gene expression task or MNIST64',default='gene')
 
     parser.add_argument('--output_dir',required=False, help='output directory for reconstructed state and latent state',default=None)
 
@@ -140,24 +141,30 @@ if __name__=="__main__":
     assert(int(n_qubit)==n_qubit)
     n_qubit=int(n_qubit)
     x_params = ParameterVector('x',n_features)
-    
-    # for encoder
-    n_qubit_e=n_qubit+num_auxiliary_encoder
+    input_task=args.input_task
+    if input_task=='gene':
+        # for encoder
+        n_qubit_e=n_qubit+num_auxiliary_encoder
 
-    tmp_gates_e=comb(n_qubit_e,2)     #number of gates for ising_interaction (zz) embedding, this number may change for another embedding
-    n_gates_e = (n_qubit_e+tmp_gates_e)*n_layers         
+        tmp_gates_e=comb(n_qubit_e,2)     #number of gates for ising_interaction (zz) embedding, this number may change for another embedding
+        n_gates_e = (n_qubit_e+tmp_gates_e)*n_layers         
 
-    # for decoder
-    n_qubit_d=n_qubit+num_auxiliary_decoder
-    tmp_gates_d=comb(n_qubit_d,2)
-    n_gates_d = (n_qubit_d+tmp_gates_d)*n_layers
+        # for decoder
+        n_qubit_d=n_qubit+num_auxiliary_decoder
+        tmp_gates_d=comb(n_qubit_d,2)
+        n_gates_d = (n_qubit_d+tmp_gates_d)*n_layers
 
-    theta_params = ParameterVector('theta', n_gates_e+n_gates_d)
+        theta_params = ParameterVector('theta', n_gates_e+n_gates_d)
 
-    num_encoder_params=n_gates_e
+        num_encoder_params=n_gates_e
+    elif input_task=='mnist':
+        assert(n_qubit==6)
+        n_gates=10*n_layers
+        theta_params = ParameterVector('theta', n_gates+n_gates)
+        num_encoder_params=n_gates
 
-    qc_e=core.encoder(n_layers,n_qubit,theta_params[:num_encoder_params],num_auxiliary_encoder)
-    qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:],num_auxiliary_decoder)
+    qc_e=core.encoder(n_layers,n_qubit,theta_params[:num_encoder_params],num_auxiliary_encoder,input_task)
+    qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:],num_auxiliary_decoder,input_task)
 
     qnn = core.QVAE_NN(circuit=qc_e, encoder=qc_e,decoder=qc_d,input_params=x_params, weight_params=theta_params,num_encoder_params=num_encoder_params,trash_qubits=trash_qubits,num_auxiliary_encoder=num_auxiliary_encoder,num_auxiliary_decoder=num_auxiliary_decoder)
     #qnn = SamplerQNN(circuit=qc_e, input_params=x_params, weight_params=theta_params_e)
