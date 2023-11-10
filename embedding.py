@@ -98,12 +98,13 @@ def ising_interaction_noInput(qc,theta,n_layers,n_qubit,num_auxiliary):
     return qc
 
 def mnist_circuit(circuit,parameters,n_layers,n_qubit):
+    num_per_layer=10
     for layer in range(n_layers):
         #Applying a ry gate in each qubit
         for i in range(n_qubit):
             #the rotation of the ry gate is defined in the parameters list
             #based on the layer
-            circuit.ry(parameters[(layer)+i], i)
+            circuit.ry(parameters[(layer*num_per_layer)+i], i)
         circuit.barrier() #Create a barrier
 
         circuit.cx(2,0) #Apply a CNOT gate between the qubit 2 and 0
@@ -112,17 +113,17 @@ def mnist_circuit(circuit,parameters,n_layers,n_qubit):
         circuit.barrier() #Create a barrier
         
         #Apply a RY gate in the qubit 0 with the rotation specified in the parameter list
-        circuit.ry(parameters[6+(layer)],0)
+        circuit.ry(parameters[6+(layer*num_per_layer)],0)
         #Apply a RY gate in the qubit 1 with the rotation specified in the parameter list
-        circuit.ry(parameters[7+(layer)],1)
+        circuit.ry(parameters[7+(layer*num_per_layer)],1)
         #Apply a RY gate in the qubit 4 with the rotation specified in the parameter list
-        circuit.ry(parameters[8+(layer)],4)
+        circuit.ry(parameters[8+(layer*num_per_layer)],4)
         circuit.barrier() #Create a barrier
         
         circuit.cx(4,1) #Apply a CNOT gate between the qubit 4 and 1
         circuit.barrier() #Create a barrier
         
         #Apply a RY gate in the qubit 1 with the rotation specified in the parameter list
-        circuit.ry(parameters[9+(layer)], 1)
+        circuit.ry(parameters[9+(layer*num_per_layer)], 1)
         circuit.barrier() #Create a barrier
     return circuit
