@@ -3,7 +3,6 @@ from re import A
 import numpy as np
 from qiskit.circuit import ParameterVector
 from qiskit.algorithms.optimizers import COBYLA, SPSA, ADAM
-
 import qiskit.quantum_info as qi
 from qiskit.utils import algorithm_globals
 #algorithm_globals.random_seed = 0
@@ -31,7 +30,8 @@ if __name__=="__main__":
     parser.add_argument('-e','--epochs', required=False, type=int, help='the desired number of epochs to run', default=10)
     parser.add_argument('-p','--patience', required=False, type=int, help='upper limit for the patience counter used in validation', default=5)
     parser.add_argument('--num_layers', required = False, type=int, help='determines the number of alternating layers in the circuit', default=1)
-    parser.add_argument('-i', '--import_data', required=False, help='path to the input file', default='dataset/data_all_cont4')
+    parser.add_argument('-i', '--import_data', required=True, help='name of the input files')
+    parser.add_argument('--import_path', required=True, help='path to the input file')
     parser.add_argument('--partition_size', required=False, help='sets partition size for splitting data into train and test sets (scales the partition_ratio arg)', default='max')
     parser.add_argument('--partition_ratio', required=False, type=str, help="governs the ration of partition sizes in the training and test sets. a list of the form [train, test]", default="0.7:0.3")
     parser.add_argument('-o','--optimizer', required=False, type=str, help='determines the Qiskit optimizer used in qnn', default='cobyla')
@@ -57,6 +57,7 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     import_name = args.import_data
+    import_path = args.import_path
     num_epoch=args.epochs
     alternate = True
     parsed_shots=args.shots
@@ -99,7 +100,7 @@ if __name__=="__main__":
     else:
         print("problem with parsing optimizer, defaulting to COBYLA")
         optimizer = COBYLA
-
+    '''
     dataset = preprocessing.import_dataset(import_name,'classical',shuffle, shuffleseed)
     maxData = preprocessing.get_max_data(import_name)
     minData = preprocessing.get_min_data(import_name)
@@ -123,6 +124,7 @@ if __name__=="__main__":
 
     Xtrain, ytrain = preprocessing.convert_for_qiskit_classical(train_set)
     Xtest, ytest = preprocessing.convert_for_qiskit_classical(test_set)
+
     if args.input_dim==0:
         n_dim=len(Xtrain[0])
     else:
@@ -130,8 +132,12 @@ if __name__=="__main__":
     Xtrain=((Xtrain-minData)/(maxData-minData)*np.pi).T[:n_dim].T
     Xtest=((Xtest-minData)/(maxData-minData)*np.pi).T[:n_dim].T
     Xtrain=preprocessing.normalize_amplitude(Xtrain)
-    Xtest=preprocessing.normalize_amplitude(Xtest)     
-
+    Xtest=preprocessing.normalize_amplitude(Xtest)
+    '''
+    Xtrain=np.loadtxt(import_path+'/Xtrain_'+import_name)
+    Xtest=np.loadtxt(import_path+'/Xtest_'+import_name)
+    ytrain=np.loadtxt(import_path+'/ytrain_'+import_name)
+    ytest=np.loadtxt(import_path+'/ytest_'+import_name)
 #######################
 ##### circuit def #####
 #######################

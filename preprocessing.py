@@ -137,11 +137,11 @@ def array_to_dataset(array,input_type):
 
 def get_max_data(filename):
     X = (np.loadtxt(filename).T[:-1]).T
-    return (max(X.flatten())).round(1)
+    return (max(X.flatten())).round(5)
 
 def get_min_data(filename):
     X = (np.loadtxt(filename).T[:-1]).T
-    return (min(X.flatten())).round(1)
+    return (min(X.flatten())).round(5)
 
 def import_dataset(filename,input_type, shuffle=False, shuffleseed=False):
     """
@@ -313,7 +313,7 @@ def convert_for_qiskit_classical(dataset):
     y = []
     for input, label in dataset:
         input = input.numpy()
-        input = input.round(1)
+        input = input.round(5)
         X.append(input)
         y.append(label)
     X = np.array(X)
