@@ -155,13 +155,14 @@ class QVAE_trainer(NeuralNetworkRegressor):
             fidelity_score =fidelity_score+qi.state_fidelity(i,j,validate=True)
         return fidelity_score/len(y)
     
-    def score(self, X, y, loss_type):
+    def score(self, X, y, loss_type,regu_type):
         y_pred = self.predict(X)[0]
+        latent=self.predict(X)[1]
         if loss_type=='fidelity':
             score=0
             for i,j in zip(y_pred,y):
                 score =score+qi.state_fidelity(i,j,validate=True)
-            return score/len(y)
+            recon_score= score/len(y)
         
         elif loss_type=='wasserstein': 
             num_data=len(X)
@@ -185,7 +186,7 @@ class QVAE_trainer(NeuralNetworkRegressor):
                 in_out_state=qi.DensityMatrix(m).expand(input_densityMatrix)
                 pi_state=(pi_state+in_out_state.data*1./num_data)
             cost=np.trace(np.matmul(pi_state,C))
-            return -cost.real
+            recon_score= -cost.real
         
         elif loss_type=='cross_entropy':
             score=0
@@ -194,7 +195,7 @@ class QVAE_trainer(NeuralNetworkRegressor):
                 log_state=qi.DensityMatrix(scipy.linalg.logm(m/np.log(2.0)))
                 relative_entropy=-qi.DensityMatrix(np.dot(v,log_state)).trace()-input_state_entropy
                 score+=relative_entropy.real
-            return -score/len(y)
+            recon_score= -score/len(y)
         
         elif loss_type=='JSD':
             score=0
@@ -203,9 +204,41 @@ class QVAE_trainer(NeuralNetworkRegressor):
                 log_M=qi.DensityMatrix(scipy.linalg.logm(M_state)/np.log(2.0)) # in base 2
                 relative_entropy=(-qi.DensityMatrix(np.dot(v,log_M)).trace()-qi.entropy(v)-qi.DensityMatrix(np.dot(m,log_M)).trace()-qi.entropy(m))*0.5 ##check if correct!
                 score+=relative_entropy.real
-            return -score*1./len(y)
+            recon_score= -score*1./len(y)
         else:
             raise ValueError('reconstruction loss type not recognized')
+        
+        dim=latent[0].dim
+        max_mixed_state=np.diag(np.full(dim,1/dim))
+        
+        if regu_type=='fidelity':
+            entropy_loss=0
+            for state in latent:
+                entropy_loss=entropy_loss+qi.state_fidelity(state,max_mixed_state,validate=True)
+            regu_score= entropy_loss*1./len(latent)
+        elif regu_type=='cross_entropy':
+            entropy_loss=0
+            for state in latent:
+                max_entropy=qi.entropy(max_mixed_state) ## this is log base 2 by default
+                log_state=scipy.linalg.logm(state)/np.log(2.0) # in base 2
+                relative_entropy=-qi.DensityMatrix(np.dot(max_mixed_state,log_state)).trace()-max_entropy #KL(a||b), a is actual, b is predict
+                entropy_loss=entropy_loss+relative_entropy.real
+            regu_score= -entropy_loss*1./len(latent)
+        elif regu_type=='JSD':
+            entropy_loss=0       
+            for state in latent:
+                M_state=0.5*(state+max_mixed_state)
+                log_M=scipy.linalg.logm(M_state)/np.log(2.0) # in base 2
+                my_entropy=qi.entropy(state) 
+                max_entryopy=qi.entropy(max_mixed_state)
+                #JSD(a||b)=0.5*KL(a||M)+0.5*KL(b||M), M=0.5a+0.5b
+                relative_entropy=(-qi.DensityMatrix(np.dot(state,log_M)).trace()-my_entropy-qi.DensityMatrix(np.dot(max_mixed_state,log_M)).trace()-max_entryopy)*0.5 ##check if correct!
+                entropy_loss=entropy_loss+relative_entropy.real
+            regu_score= -entropy_loss*1./len(latent)
+        
+        else:
+            raise ValueError('regularizer type not recognized')
+        return recon_score+self._beta*regu_score
 
 class StateVector_ObjectiveFunction(ObjectiveFunction):
 

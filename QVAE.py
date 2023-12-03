@@ -1,5 +1,5 @@
-from pyexpat.errors import XML_ERROR_RESERVED_PREFIX_XML
-from re import A
+#from pyexpat.errors import XML_ERROR_RESERVED_PREFIX_XML
+#from re import A
 import numpy as np
 from qiskit.circuit import ParameterVector
 from qiskit.algorithms.optimizers import COBYLA, SPSA, ADAM
@@ -173,10 +173,7 @@ if __name__=="__main__":
     qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:],num_auxiliary_decoder,input_task)
 
     qnn = core.QVAE_NN(circuit=qc_e, encoder=qc_e,decoder=qc_d,input_params=x_params, weight_params=theta_params,num_encoder_params=num_encoder_params,trash_qubits=trash_qubits,num_auxiliary_encoder=num_auxiliary_encoder,num_auxiliary_decoder=num_auxiliary_decoder)
-    #qnn = SamplerQNN(circuit=qc_e, input_params=x_params, weight_params=theta_params_e)
 
-    #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
-    #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
     if args.initial_point!=None:
         initial_point=[int(args.initial_point)]*qnn.num_weights
     else:
@@ -234,9 +231,8 @@ if __name__=="__main__":
         print('start fitting')
         model.fit(Xtrain, Xtrain)
 
-        this_train_score=model.score(Xtrain, Xtrain,reconstruction_loss)
-
-        this_train_fidelity=model.score(Xtrain, Xtrain,'fidelity')
+        this_train_score=model.score(Xtrain, Xtrain,reconstruction_loss,regularizer_type)
+        this_train_fidelity=model.score_fidelity(Xtrain, Xtrain)
 
         print(epoch,'train fidelity:',this_train_fidelity,'train score:',this_train_score)
 
@@ -252,10 +248,15 @@ if __name__=="__main__":
             print("ran out of patience")
             break
 
-    trainscore = best_model.score(Xtrain, Xtrain,'fidelity')
-    testscore = best_model.score(Xtest, Xtest,'fidelity')
-    print(f'best model train score: {trainscore}')
-    print(f'best model test score: {testscore}')
+    trainscore = best_model.score_fidelity(Xtrain, Xtrain)
+    testscore = best_model.score_fidelity(Xtest, Xtest)
+    train_negative_loss=best_model.score(Xtrain, Xtrain,reconstruction_loss,regularizer_type)
+    test_negative_loss=best_model.score(Xtest, Xtest,reconstruction_loss,regularizer_type)
+    print(f'best model train fidelity score: {trainscore}')
+    print(f'best model test fidelity score: {testscore}')
+    print(f'best model train negative loss: {train_negative_loss}')
+    print(f'best model test negative loss: {test_negative_loss}')
+
 
     if args.output_dir!=None:
         if args.global_state==True:
