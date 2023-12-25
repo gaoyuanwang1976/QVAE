@@ -407,7 +407,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         
         val_1 =self.reconstruction_loss(matrix=output, vector=self._y)
         val_2 =self.quantum_relative_entropy(latent=latent)
-        val = val_1+self._beta*val_2 #minimize, normalization is in val_1 and val_2
+        val = val_1-self._beta*val_2 #minimize, normalization is in val_1 and val_2
         return val
     
     def gradient(self, weights: np.ndarray) -> np.ndarray:
