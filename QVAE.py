@@ -29,7 +29,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description="Simulate a QNN with the appropriate hyperparameters.")
     parser.add_argument('-e','--epochs', required=False, type=int, help='the desired number of epochs to run', default=10)
     parser.add_argument('-p','--patience', required=False, type=int, help='upper limit for the patience counter used in validation', default=5)
-    parser.add_argument('--num_layers', required = False, type=int, help='determines the number of alternating layers in the circuit', default=1)
+    parser.add_argument('--num_layers', required = False, type=int, help='determines the number of alternating layers in the circuit', default=3)
     parser.add_argument('-i', '--import_data', required=True, help='name of the input files')
     parser.add_argument('--import_path', required=True, help='path to the input file')
     parser.add_argument('--partition_size', required=False, help='sets partition size for splitting data into train and test sets (scales the partition_ratio arg)', default='max')
@@ -40,15 +40,14 @@ if __name__=="__main__":
     parser.add_argument('--shuffleseed', required=False, type=int, help='a seed for use in shuffling the dataset, if left False and --shuffle=True, will be completely random', default=False)
     
     parser.add_argument('-t','--num_trash_qubits', required=False, type=int, help='number of trash qubits, the first 0,...,N-1 qubits will be traced out in the latent space', default=1)
-    parser.add_argument('--input_dim', required=False, type=int, help='customize the input data dimension, if zero the original input dimension is preserved', default=0)
-    parser.add_argument('--reconstruction_loss', required=False, type=str, help='define the loss used in the reconstruction term of the objective', default='fidelity')
+    #parser.add_argument('--input_dim', required=False, type=int, help='customize the input data dimension, if zero the original input dimension is preserved', default=0)
+    parser.add_argument('--reconstruction_loss', required=False, type=str, help='choose between cross_entropy, fidelity, wasserstein and JSD', default='fidelity')
     parser.add_argument('--beta_weight', required=False, type=float, help='the beta parameter that controlls the relative weight of the quantum entropy term in the objective', default=1.0)
-    parser.add_argument('--regularizer_type', required=False, type=str, help='choose between KL-Divergence and JS-Divergence', default='JSD')
+    parser.add_argument('--regularizer_type', required=False, type=str, help='choose between KLD, JSD and fidelity', default='JSD')
     parser.add_argument('--num_auxiliary_encoder', required=False, type=int, help='number of auxiliary qubits in the encoder', default=0)
     parser.add_argument('--num_auxiliary_decoder', required=False, type=int, help='number of auxiliary qubits in the decoder', default=0)
     parser.add_argument('--global_state', action='store_true', help='whether a global quantum state is used')
     parser.add_argument('--initial_point', required=False, help='initial parameter of the neural network', default=None)
-    parser.add_argument('--input_task',required=False, help='specify whether gene expression task or MNIST64',default='gene')
 
     parser.add_argument('--output_dir',required=False, help='output directory for reconstructed state and latent state',default=None)
 
@@ -138,6 +137,14 @@ if __name__=="__main__":
     Xtest=np.loadtxt(import_path+'/Xtest_'+import_name)
     ytrain=np.loadtxt(import_path+'/ytrain_'+import_name)
     ytest=np.loadtxt(import_path+'/ytest_'+import_name)
+    if partition_size != 'max':
+        train_size=int(int(partition_size)*ratio[0])
+        test_size=int(int(partition_size)*ratio[1])
+        Xtrain=Xtrain[:train_size]
+        Xtest=Xtest[:test_size]
+        ytrain=ytrain[:train_size]
+        ytest=ytest[:test_size]
+
 #######################
 ##### circuit def #####
 #######################
@@ -147,36 +154,26 @@ if __name__=="__main__":
     assert(int(n_qubit)==n_qubit)
     n_qubit=int(n_qubit)
     x_params = ParameterVector('x',n_features)
-    input_task=args.input_task
-    if input_task=='gene':
-        # for encoder
-        n_qubit_e=n_qubit+num_auxiliary_encoder
 
-        tmp_gates_e=comb(n_qubit_e,2)     #number of gates for ising_interaction (zz) embedding, this number may change for another embedding
-        n_gates_e = (n_qubit_e+tmp_gates_e)*n_layers         
+    # for encoder
+    n_qubit_e=n_qubit+num_auxiliary_encoder
 
-        # for decoder
-        n_qubit_d=n_qubit+num_auxiliary_decoder
-        tmp_gates_d=comb(n_qubit_d,2)
-        n_gates_d = (n_qubit_d+tmp_gates_d)*n_layers
+    tmp_gates_e=comb(n_qubit_e,2)     #number of gates for ising_interaction (zz) embedding, this number may change for another embedding
+    n_gates_e = (n_qubit_e+tmp_gates_e)*n_layers         
 
-        theta_params = ParameterVector('theta', n_gates_e+n_gates_d)
+    # for decoder
+    n_qubit_d=n_qubit+num_auxiliary_decoder
+    tmp_gates_d=comb(n_qubit_d,2)
+    n_gates_d = (n_qubit_d+tmp_gates_d)*n_layers
 
-        num_encoder_params=n_gates_e
-    elif input_task=='mnist':
-        assert(n_qubit==6)
-        n_gates=10*n_layers
-        theta_params = ParameterVector('theta', n_gates+n_gates)
-        num_encoder_params=n_gates
+    theta_params = ParameterVector('theta', n_gates_e+n_gates_d)
 
-    qc_e=core.encoder(n_layers,n_qubit,theta_params[:num_encoder_params],num_auxiliary_encoder,input_task)
-    qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:],num_auxiliary_decoder,input_task)
+    num_encoder_params=n_gates_e
+
+    qc_e=core.encoder(n_layers,n_qubit,theta_params[:num_encoder_params],num_auxiliary_encoder)
+    qc_d=core.decoder(n_layers,n_qubit,theta_params[num_encoder_params:],num_auxiliary_decoder)
 
     qnn = core.QVAE_NN(circuit=qc_e, encoder=qc_e,decoder=qc_d,input_params=x_params, weight_params=theta_params,num_encoder_params=num_encoder_params,trash_qubits=trash_qubits,num_auxiliary_encoder=num_auxiliary_encoder,num_auxiliary_decoder=num_auxiliary_decoder)
-    #qnn = SamplerQNN(circuit=qc_e, input_params=x_params, weight_params=theta_params_e)
-
-    #qnn_weights = algorithm_globals.random.random(qnn.num_weights)
-    #model=NeuralNetworkRegressor(neural_network=qnn,optimizer=optimizer(),loss= 'squared_error',warm_start=True,initial_point=qnn_weights)
     if args.initial_point!=None:
         initial_point=[int(args.initial_point)]*qnn.num_weights
     else:

@@ -21,8 +21,6 @@ class QVAE_NN(SamplerQNN):
     def __init__(self,encoder: QuantumCircuit,decoder: QuantumCircuit,num_encoder_params:int,trash_qubits,num_auxiliary_encoder,num_auxiliary_decoder,**kwargs):
             super(QVAE_NN, self).__init__(**kwargs)
             self._encoder = encoder.copy()
-            #if len(self._encoder.clbits) == 0:
-            #    self._encoder.measure_all()
             self._decoder = decoder.copy()
             self._num_encoder_params=num_encoder_params
             self._trash_qubits=trash_qubits
@@ -36,11 +34,8 @@ class QVAE_NN(SamplerQNN):
         num_encoder_params=self._num_encoder_params
         encoder_weights=weights[:num_encoder_params]
         decoder_weights=weights[num_encoder_params:]
-        #encoder_weights=[0]*num_encoder_params
-        #decoder_weights=[0]*(len(weights)-num_encoder_params)
         
         trash_qubits=self._trash_qubits
-        #_, num_samples = self._preprocess_forward(input_data, encoder_weights)
         num_samples=len(input_data)
 
         ### Encoder
@@ -122,7 +117,6 @@ class QVAE_NN(SamplerQNN):
         for item in reduced_result:
             latent_state=qi.DensityMatrix(item)
             latent_full=latent_state.tensor(reconstruction_qubits)
-            #assert(2**n_qubit==latent_full.dim)
             latent_full=latent_full.tensor(auxiliary_qubits)
             ### partial trace over auxiliary qubits decoder 
             quantum_state=latent_full.evolve(qc_d)
@@ -139,7 +133,6 @@ class QVAE_trainer(NeuralNetworkRegressor):
         self._reconstruction_loss=reconstruction_loss
         self._beta=beta
         self._regularizer_type=regularizer_type
-        #self._global_state_flag=global_state_flag
 
     def _fit_internal(self, X: np.ndarray, y: np.ndarray):
         function: ObjectiveFunction = None
@@ -226,7 +219,6 @@ class StateVector_ObjectiveFunction(ObjectiveFunction):
 
         for i in range(num_outputs):
             grad += weight_prob_grad[:, i, :].T @ self._loss(output[:,i], self._y[:,i])
-            #grad += weight_prob_grad[:, i, :].T @ self._loss(np.full(num_samples, i), self._y)
         grad = grad / self._num_samples
         return grad
     
@@ -270,7 +262,6 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
                     input_state_entropy=qi.entropy(v)
                     log_state=qi.DensityMatrix(scipy.linalg.logm(m)/np.log(2.0))
                     relative_entropy=-qi.DensityMatrix(np.dot(v,log_state)).trace()-input_state_entropy
-                    #current_fidelity=qi.state_fidelity(m,v,validate=False) # this is equal to the first term in relative entropy only if v is a pure state
                     sum+=relative_entropy.real
                 return sum*1./len(vector)
 
@@ -300,18 +291,6 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         max_mixed_state=np.diag(np.full(dim,1/dim))
         ## analogy KL divergence
         if type_regularizer=='KLD':
-            '''
-            if self._global_state_flag==True:
-                combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
-                for state in latent:
-                    combined_state=combined_state+state.data*1./len(latent)
-                max_entropy=qi.entropy(max_mixed_state) ## this is log base 2 by default
-                log_state=scipy.linalg.logm(combined_state)/np.log(2.0) # in base 2
-                relative_entropy=-qi.DensityMatrix(np.dot(max_mixed_state,log_state)).trace()-max_entropy #KL(a||b), a is actual, b is predict. relative_entropy>=0
-                entropy_loss=relative_entropy.real
-                return entropy_loss
-            else:
-            '''
             entropy_loss=0
             for state in latent:
                 max_entropy=qi.entropy(max_mixed_state) ## this is log base 2 by default
@@ -322,23 +301,6 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
 
         ## analogy Jensen-Shannon divergence
         elif type_regularizer=='JSD':
-            '''
-            if self._global_regularizer_flag==True:
-                combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
-                for state in latent:
-                    combined_state=combined_state+state.data*1./len(latent)
-
-                M_state=0.5*(state+max_mixed_state)
-                log_M=scipy.linalg.logm(M_state)/np.log(2.0) # in base 2
-                my_entropy=qi.entropy(state) 
-                max_entryopy=qi.entropy(max_mixed_state)
-                #JSD(a||b)=0.5*KL(a||M)+0.5*KL(b||M), M=0.5a+0.5b
-                relative_entropy=(-qi.DensityMatrix(np.dot(state,log_M)).trace()-my_entropy-qi.DensityMatrix(np.dot(max_mixed_state,log_M)).trace()-max_entryopy)*0.5 ##check if correct!
-                entropy_loss=relative_entropy.real
-                return entropy_loss
-
-            else: 
-            '''
             entropy_loss=0       
             for state in latent:
                 M_state=0.5*(state+max_mixed_state)
@@ -351,16 +313,6 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
             return entropy_loss*1./len(latent)
 
         elif type_regularizer=='fidelity':
-            '''
-            if self._global_regularizer_flag==True:
-                combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
-                for state in latent:
-                    combined_state=combined_state+state.data*1./len(latent)
-                entropy_loss=qi.state_fidelity(combined_state,max_mixed_state,validate=True)
-                return -entropy_loss
-
-            else:
-            '''
             entropy_loss=0
             for state in latent:
                 entropy_loss=entropy_loss+qi.state_fidelity(state,max_mixed_state,validate=True)
@@ -380,17 +332,7 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
             swap=result.get_unitary(swap_circuit,3).data
             identity_matrix=np.identity(dim*dim)
             C=0.5*(identity_matrix-swap)
-            '''
-            if self._global_regularizer_flag==True:
-                combined_state=np.zeros((len(latent[0].data),len(latent[0].data)))
-                for state in latent:
-                    combined_state=combined_state+state.data*1./len(latent)
-                pi_state=(qi.DensityMatrix(max_mixed_state).expand(combined_state)).data
-                cost=np.trace(np.matmul(pi_state,C))
-                return cost.real
 
-            else:
-            '''
             cost=0
             for state in latent:          
                 pi_state=(qi.DensityMatrix(max_mixed_state).expand(state)).data
@@ -414,18 +356,12 @@ class DensityMatrix_ObjectiveFunction(ObjectiveFunction):
         raise NotImplementedError
 
 
-def encoder(n_layers,n_qubit,theta_params,num_auxiliary_encoder,input_task):
+def encoder(n_layers,n_qubit,theta_params,num_auxiliary_encoder):
     qc=QuantumCircuit(n_qubit+num_auxiliary_encoder)
-    if input_task=='gene':
-        embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_encoder)
-    elif input_task=='mnist':
-        embedding.mnist_circuit(qc,theta_params,n_layers,n_qubit)
+    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_encoder)
     return qc
 
-def decoder(n_layers,n_qubit,theta_params,num_auxiliary_decoder,input_task):
+def decoder(n_layers,n_qubit,theta_params,num_auxiliary_decoder):
     qc=QuantumCircuit(n_qubit+num_auxiliary_decoder)
-    if input_task=='gene':
-        embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_decoder)
-    elif input_task=='mnist':
-        embedding.mnist_circuit(qc,theta_params,n_layers,n_qubit).inverse()
+    embedding.ising_interaction_noInput(qc,theta_params,n_layers,n_qubit,num_auxiliary_decoder)
     return qc
